@@ -1,32 +1,65 @@
 package schema
 
+import "fmt"
+
 type StringSchema struct {
-	checks []func(string) bool
+	Schema[string]
 }
+
+var _ ISchema = (*StringSchema)(nil)
 
 func String() *StringSchema {
 	return &StringSchema{}
 }
 
-func (s *StringSchema) Min(min int) *StringSchema {
-	s.checks = append(s.checks, func(value string) bool {
-		return len(value) >= min
-	})
+func (s *StringSchema) Min(minLength int) *StringSchema {
+	validator := Validator[string]{
+		MessageFunc: func(value string) string {
+			return fmt.Sprintf("String must contain at least %d character(s)", minLength)
+		},
+		ValidateFunc: func(value string) bool {
+			return len(value) >= minLength
+		},
+	}
+
+	s.validators = append(s.validators, validator)
 
 	return s
 }
 
-func (s *StringSchema) Parse(value any) bool {
-	val, ok := value.(string)
-	if !ok {
-		return false
+func (s *StringSchema) Max(maxLength int) *StringSchema {
+	validator := Validator[string]{
+		MessageFunc: func(value string) string {
+			return fmt.Sprintf("String must contain at most %d character(s)", maxLength)
+		},
+		ValidateFunc: func(value string) bool {
+			return len(value) <= maxLength
+		},
 	}
 
-	for _, check := range s.checks {
-		if !check(val) {
-			return false
+	s.validators = append(s.validators, validator)
+
+	return s
+}
+
+func (s *StringSchema) Parse(value any) *ValidationResult {
+	val, ok := value.(string)
+	if !ok {
+		return &ValidationResult{Errors: []ValidationError{{Path: "", Message: fmt.Sprintf("Expected string, received %T", value)}}}
+	}
+
+	res := &ValidationResult{}
+
+	for _, validator := range s.validators {
+		if !validator.ValidateFunc(val) {
+			err := ValidationError{
+				Path:    "",
+				Message: validator.MessageFunc(val),
+			}
+
+			res.Errors = append(res.Errors, err)
 		}
 	}
 
-	return true
+	return res
 }

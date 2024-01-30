@@ -1,7 +1,7 @@
 package schema
 
 import (
-	"log"
+	"fmt"
 	"reflect"
 )
 
@@ -9,30 +9,47 @@ type ObjectSchema struct {
 	value map[string]ISchema
 }
 
+var _ ISchema = (*ObjectSchema)(nil)
+
 func Object(obj map[string]ISchema) *ObjectSchema {
 	return &ObjectSchema{value: obj}
 }
 
-func (s *ObjectSchema) Parse(value any) bool {
+func (s *ObjectSchema) Parse(value any) *ValidationResult {
 	t := reflect.TypeOf(value)
 	val := reflect.ValueOf(value)
 
 	if t.Kind() != reflect.Struct {
-		return false
+		return &ValidationResult{Errors: []ValidationError{{Path: "", Message: fmt.Sprintf("Expected struct, got %T", value)}}}
 	}
+
+	res := &ValidationResult{}
 
 	for key, schema := range s.value {
 		if _, ok := t.FieldByName(key); !ok {
-			log.Printf("property by key '%s' was not found on struct '%v'\n", key, t.Name())
-			return false
+			err := ValidationError{
+				Path:    key,
+				Message: "Required",
+			}
+
+			res.Errors = append(res.Errors, err)
+			continue
 		}
 
 		str := val.FieldByName(key).Interface()
 
-		if !schema.Parse(str) {
-			return false
+		result := schema.Parse(str)
+		if !result.IsValid() {
+			for _, err := range result.Errors {
+				newError := ValidationError{
+					Path:    key,
+					Message: err.Message,
+				}
+
+				res.Errors = append(res.Errors, newError)
+			}
 		}
 	}
 
-	return true
+	return res
 }
