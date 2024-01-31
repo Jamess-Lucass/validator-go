@@ -41,25 +41,3 @@ func (s *IntSchema) Gt(min int) *IntSchema {
 
 	return s
 }
-
-func (s *IntSchema) Parse(value any) *ValidationResult {
-	val, ok := value.(int)
-	if !ok {
-		return &ValidationResult{Errors: []ValidationError{{Path: "", Message: fmt.Sprintf("Expected int, received %T", value)}}}
-	}
-
-	res := &ValidationResult{}
-
-	for _, validator := range s.validators {
-		if !validator.ValidateFunc(val) {
-			err := ValidationError{
-				Path:    "",
-				Message: validator.MessageFunc(val),
-			}
-
-			res.Errors = append(res.Errors, err)
-		}
-	}
-
-	return res
-}
