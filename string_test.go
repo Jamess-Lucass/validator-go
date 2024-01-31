@@ -3,8 +3,9 @@ package schema_test
 import (
 	"testing"
 
-	schema "github.com/Jamess-Lucass/validator-go"
 	"github.com/stretchr/testify/assert"
+
+	schema "github.com/Jamess-Lucass/validator-go"
 )
 
 func TestString_Type(t *testing.T) {
@@ -38,4 +39,14 @@ func TestString_Max(t *testing.T) {
 	assert.True(t, s.Parse("1234").IsValid())
 
 	assert.False(t, s.Parse("123456").IsValid())
+}
+
+func TestString_Regex(t *testing.T) {
+	s := schema.String().Regex(`^[a-z]+$`)
+
+	assert.True(t, s.Parse("abc").IsValid())
+	assert.True(t, s.Parse("abcdef").IsValid())
+
+	assert.False(t, s.Parse("123").IsValid())
+	assert.False(t, s.Parse("abc123").IsValid())
 }

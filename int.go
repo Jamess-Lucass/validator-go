@@ -42,6 +42,37 @@ func (s *IntSchema) Gt(min int) *IntSchema {
 	return s
 }
 
+func (s *IntSchema) Eq(number int) *IntSchema {
+	validator := Validator[int]{
+		MessageFunc: func(value int) string {
+			return fmt.Sprintf("Int must be equal to %d", number)
+		},
+		ValidateFunc: func(value int) bool {
+			return value == number
+		},
+	}
+
+	s.validators = append(s.validators, validator)
+
+	return s
+
+}
+
+func (s *IntSchema) Range(min, max int) *IntSchema {
+	validator := Validator[int]{
+		MessageFunc: func(value int) string {
+			return fmt.Sprintf("Int must be between %d and %d", min, max)
+		},
+		ValidateFunc: func(value int) bool {
+			return value >= min && value <= max
+		},
+	}
+
+	s.validators = append(s.validators, validator)
+
+	return s
+}
+
 func (s *IntSchema) Parse(value any) *ValidationResult {
 	val, ok := value.(int)
 	if !ok {

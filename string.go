@@ -1,6 +1,9 @@
 package schema
 
-import "fmt"
+import (
+	"fmt"
+	"regexp"
+)
 
 type StringSchema struct {
 	Schema[string]
@@ -34,6 +37,22 @@ func (s *StringSchema) Max(maxLength int) *StringSchema {
 		},
 		ValidateFunc: func(value string) bool {
 			return len(value) <= maxLength
+		},
+	}
+
+	s.validators = append(s.validators, validator)
+
+	return s
+}
+
+func (s *StringSchema) Regex(pattern string) *StringSchema {
+	validator := Validator[string]{
+		MessageFunc: func(value string) string {
+			return fmt.Sprintf("String must match the regex pattern: %s", pattern)
+		},
+		ValidateFunc: func(value string) bool {
+			match, _ := regexp.MatchString(pattern, value)
+			return match
 		},
 	}
 

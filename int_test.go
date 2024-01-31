@@ -3,8 +3,9 @@ package schema_test
 import (
 	"testing"
 
-	schema "github.com/Jamess-Lucass/validator-go"
 	"github.com/stretchr/testify/assert"
+
+	schema "github.com/Jamess-Lucass/validator-go"
 )
 
 func TestInt_Type(t *testing.T) {
@@ -52,4 +53,24 @@ func TestInt_Gt(t *testing.T) {
 
 	assert.False(t, s.Parse(5).IsValid())
 	assert.False(t, s.Parse(-5).IsValid())
+}
+
+func TestInt_Eq(t *testing.T) {
+	s := schema.Int().Eq(5)
+
+	assert.True(t, s.Parse(5).IsValid())
+
+	assert.False(t, s.Parse(4).IsValid())
+	assert.False(t, s.Parse(6).IsValid())
+}
+
+func TestInt_Range(t *testing.T) {
+	s := schema.Int().Range(5, 10)
+
+	assert.True(t, s.Parse(5).IsValid())
+	assert.True(t, s.Parse(6).IsValid())
+	assert.True(t, s.Parse(10).IsValid())
+
+	assert.False(t, s.Parse(4).IsValid())
+	assert.False(t, s.Parse(11).IsValid())
 }
