@@ -1,5 +1,9 @@
 package schema
 
+import (
+	"fmt"
+)
+
 type ValidationResult struct {
 	Errors []ValidationError
 }
@@ -28,4 +32,39 @@ type Schema[T any] struct {
 type Validator[T any] struct {
 	MessageFunc  func(T) string
 	ValidateFunc func(T) bool
+}
+
+func (s *Schema[T]) Refine(predicate func(T) bool) *Schema[T] {
+	validator := Validator[T]{
+		MessageFunc: func(value T) string {
+			return "Invalid input"
+		},
+		ValidateFunc: predicate,
+	}
+
+	s.validators = append(s.validators, validator)
+
+	return s
+}
+
+func (s *Schema[T]) Parse(value any) *ValidationResult {
+	val, ok := value.(T)
+	if !ok {
+		return &ValidationResult{Errors: []ValidationError{{Path: "", Message: fmt.Sprintf("Expected string, received %T", value)}}}
+	}
+
+	res := &ValidationResult{}
+
+	for _, validator := range s.validators {
+		if !validator.ValidateFunc(val) {
+			err := ValidationError{
+				Path:    "",
+				Message: validator.MessageFunc(val),
+			}
+
+			res.Errors = append(res.Errors, err)
+		}
+	}
+
+	return res
 }

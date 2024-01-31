@@ -121,25 +121,3 @@ func (s *StringSchema) EndsWith(str string) *StringSchema {
 
 	return s
 }
-
-func (s *StringSchema) Parse(value any) *ValidationResult {
-	val, ok := value.(string)
-	if !ok {
-		return &ValidationResult{Errors: []ValidationError{{Path: "", Message: fmt.Sprintf("Expected string, received %T", value)}}}
-	}
-
-	res := &ValidationResult{}
-
-	for _, validator := range s.validators {
-		if !validator.ValidateFunc(val) {
-			err := ValidationError{
-				Path:    "",
-				Message: validator.MessageFunc(val),
-			}
-
-			res.Errors = append(res.Errors, err)
-		}
-	}
-
-	return res
-}
