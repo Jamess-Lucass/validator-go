@@ -44,6 +44,17 @@ func TestInt_Lt(t *testing.T) {
 	assert.False(t, s.Parse(500).IsValid())
 }
 
+func TestInt_Lte(t *testing.T) {
+	s := schema.Int().Lte(5)
+
+	assert.True(t, s.Parse(4).IsValid())
+	assert.True(t, s.Parse(-5).IsValid())
+	assert.True(t, s.Parse(5).IsValid())
+
+	assert.False(t, s.Parse(6).IsValid())
+	assert.False(t, s.Parse(500).IsValid())
+}
+
 func TestInt_Gt(t *testing.T) {
 	s := schema.Int().Gt(5)
 
@@ -52,4 +63,68 @@ func TestInt_Gt(t *testing.T) {
 
 	assert.False(t, s.Parse(5).IsValid())
 	assert.False(t, s.Parse(-5).IsValid())
+}
+
+func TestInt_Gte(t *testing.T) {
+	s := schema.Int().Gte(5)
+
+	assert.True(t, s.Parse(5).IsValid())
+	assert.True(t, s.Parse(6).IsValid())
+	assert.True(t, s.Parse(500).IsValid())
+
+	assert.False(t, s.Parse(4).IsValid())
+	assert.False(t, s.Parse(-5).IsValid())
+}
+
+func TestInt_Positive(t *testing.T) {
+	s := schema.Int().Positive()
+
+	assert.True(t, s.Parse(1).IsValid())
+	assert.True(t, s.Parse(6).IsValid())
+	assert.True(t, s.Parse(500).IsValid())
+
+	assert.False(t, s.Parse(0).IsValid())
+	assert.False(t, s.Parse(-5).IsValid())
+}
+
+func TestInt_Nonnegative(t *testing.T) {
+	s := schema.Int().Nonnegative()
+
+	assert.True(t, s.Parse(0).IsValid())
+	assert.True(t, s.Parse(6).IsValid())
+	assert.True(t, s.Parse(500).IsValid())
+
+	assert.False(t, s.Parse(-5).IsValid())
+}
+
+func TestInt_Negative(t *testing.T) {
+	s := schema.Int().Negative()
+
+	assert.True(t, s.Parse(-1).IsValid())
+	assert.True(t, s.Parse(-500).IsValid())
+
+	assert.False(t, s.Parse(0).IsValid())
+	assert.False(t, s.Parse(5).IsValid())
+}
+
+func TestInt_Nonpositive(t *testing.T) {
+	s := schema.Int().Nonpositive()
+
+	assert.True(t, s.Parse(0).IsValid())
+	assert.True(t, s.Parse(-500).IsValid())
+
+	assert.False(t, s.Parse(1).IsValid())
+	assert.False(t, s.Parse(5).IsValid())
+}
+
+func TestInt_MultipleOf(t *testing.T) {
+	s := schema.Int().MultipleOf(5)
+
+	assert.True(t, s.Parse(0).IsValid())
+	assert.True(t, s.Parse(-5).IsValid())
+	assert.True(t, s.Parse(-25).IsValid())
+	assert.True(t, s.Parse(50).IsValid())
+
+	assert.False(t, s.Parse(1).IsValid())
+	assert.False(t, s.Parse(3).IsValid())
 }
