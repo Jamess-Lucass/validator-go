@@ -2,6 +2,7 @@ package schema
 
 import (
 	"fmt"
+	"reflect"
 )
 
 type ValidationResult struct {
@@ -50,7 +51,7 @@ func (s *Schema[T]) Refine(predicate func(T) bool) *Schema[T] {
 func (s *Schema[T]) Parse(value any) *ValidationResult {
 	val, ok := value.(T)
 	if !ok {
-		return &ValidationResult{Errors: []ValidationError{{Path: "", Message: fmt.Sprintf("Expected string, received %T", value)}}}
+		return &ValidationResult{Errors: []ValidationError{{Path: "", Message: fmt.Sprintf("Expected %s, received %T", reflect.TypeOf(val).String(), value)}}}
 	}
 
 	res := &ValidationResult{}
