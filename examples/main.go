@@ -44,6 +44,11 @@ func main() {
 
 	fmt.Printf("(3): is valid: %t\n", s3.IsValid())
 
+	// 4
 	boolean := schema.Bool().Parse(false)
 	fmt.Printf("(4): is valid: %t\n", boolean.IsValid())
+
+	//5
+	literal := schema.Literal("test").Parse(10)
+	fmt.Printf("(5): is valid: %t\n", literal.IsValid())
 }
