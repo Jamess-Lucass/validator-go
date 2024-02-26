@@ -54,7 +54,7 @@ func (s *Schema[T]) Parse(value any) *ValidationResult {
 		return &ValidationResult{Errors: []ValidationError{{Path: "", Message: fmt.Sprintf("Expected %s, received %T", reflect.TypeOf(val).String(), value)}}}
 	}
 
-	res := &ValidationResult{}
+	res := &ValidationResult{Errors: []ValidationError{}}
 
 	for _, validator := range s.validators {
 		if !validator.ValidateFunc(val) {
