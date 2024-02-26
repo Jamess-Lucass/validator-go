@@ -74,7 +74,7 @@ mySchema := schema.Object(map[string]schema.ISchema{
 
 // Parsing
 type User struct {
-	Username string
+    Username string
 }
 
 user1 := User{
