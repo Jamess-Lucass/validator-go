@@ -1,8 +1,15 @@
-# validator-go
-
-Schema validation in Go.
-
-Heavily inspired by [Zod](https://github.com/colinhacks/zod)
+<p align="center">
+  <h1 align="center">Validator-go</h1>
+  <p align="center">
+    <br/>
+    <a href="https://github.com/colinhacks/zod">Zod</a> inspired schema validation in Go.
+  </p>
+</p>
+<br/>
+<p align="center">
+<a href="https://github.com/Jamess-Lucass/validator-go/actions?query=branch%3Amain"><img src="https://github.com/Jamess-Lucass/validator-go/actions/workflows/test.yml/badge.svg?event=push&branch=main" alt="CI Test Status" /></a>
+<a href="https://opensource.org/licenses/MIT" rel="nofollow"><img src="https://img.shields.io/github/license/Jamess-Lucass/validator-go" alt="License"></a>
+</p>
 
 ## Table of contents
 
