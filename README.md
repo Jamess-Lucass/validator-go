@@ -209,14 +209,14 @@ user := User{
 
 mySchema := schema.Object(map[string]schema.ISchema{
     "Firstname": schema.String().Refine(func(value string) bool {
-        return value == "john" || value == "doe"
+        return value == "john" || value == "jane"
     }),
-    "Lastname": schema.Int().Refine(func(value int) bool {
-        return value == 10
+    "Lastname": schema.String().Refine(func(value string) bool {
+        return strings.Contains(value, "doe")
     }),
     "Age": schema.Int().Lt(10),
 }).Refine(func(value map[string]interface{}) bool {
-    if value["Firstname"] == "doe" {
+    if value["Firstname"] == "jane" {
         if age, ok := value["Age"].(int); ok {
             return age < 5
         }
