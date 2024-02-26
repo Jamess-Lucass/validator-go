@@ -196,9 +196,9 @@ This may also be used in conjunction with `.Object`
 
 ```go
 type User struct {
-	Firstname string
-	Lastname  string
-	Age       int
+    Firstname string
+    Lastname  string
+    Age       int
 }
 
 user := User{
