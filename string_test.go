@@ -22,6 +22,13 @@ func TestString_Type(t *testing.T) {
 	assert.False(t, s.Parse(0).IsValid())
 }
 
+func TestString_Path(t *testing.T) {
+	s := schema.String().Min(4).Parse("123")
+
+	assert.Len(t, s.Errors, 1)
+	assert.Equal(t, "", s.Errors[0].Path)
+}
+
 func TestString_Max(t *testing.T) {
 	s := schema.String().Max(5)
 
