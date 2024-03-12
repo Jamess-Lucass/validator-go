@@ -23,6 +23,7 @@
 - [Ints](#ints)
 - [Booleans](#booleans)
 - [Objects](#objects)
+- [Arrays](#arrays)
 - [Schema methods](#schema-methods)
   - [`.parse`](#parse)
   - [`.refine`](#refine)
@@ -149,6 +150,30 @@ mySchema := schema.Object(map[string]schema.ISchema{
     "Firstname": schema.String().Min(2).Max(128),
     "Age": schema.Int().Gte(18),
     "IsVerified": schema.Bool(),
+})
+```
+
+## Arrays
+
+The array schema accepts any type that implements the `ISchema` interface, this allows you to parse in other schema.
+
+```go
+mySchema := schema.Array(schema.String().Min(2)).Max(4)
+```
+
+The above schema defines an array of strings, each of which has a minimum length of 2, with the overall array max length of 4.
+
+You may utilize array and object to construct a more advanced schema
+
+```go
+mySchema := schema.Object(map[string]schema.ISchema{
+    "Username": schema.String().Min(5),
+    "Firstname": schema.String().Min(2).Max(128),
+    "Age": schema.Int().Gte(18),
+    "Addresses": schema.Array(schema.Object(map[string]schema.ISchema{
+        "Postcode": schema.String().Min(4).Max(10),
+        "Country": schema.String().Length(2),
+    })),
 })
 ```
 
