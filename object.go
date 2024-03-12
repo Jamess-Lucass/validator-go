@@ -31,11 +31,12 @@ func (s *ObjectSchema) Refine(predicate func(map[string]interface{}) bool) *Obje
 
 func (s *ObjectSchema) Parse(value any) *ValidationResult {
 	t := reflect.TypeOf(value)
-	val := reflect.ValueOf(value)
 
-	if t.Kind() != reflect.Struct {
+	if t == nil || t.Kind() != reflect.Struct {
 		return &ValidationResult{Errors: []ValidationError{{Path: "", Message: fmt.Sprintf("Expected struct, got %T", value)}}}
 	}
+
+	val := reflect.ValueOf(value)
 
 	res := &ValidationResult{}
 
@@ -56,7 +57,7 @@ func (s *ObjectSchema) Parse(value any) *ValidationResult {
 		if !result.IsValid() {
 			for _, err := range result.Errors {
 				newError := ValidationError{
-					Path:    key,
+					Path:    formatPath(key, err.Path),
 					Message: err.Message,
 				}
 
@@ -65,7 +66,7 @@ func (s *ObjectSchema) Parse(value any) *ValidationResult {
 		}
 	}
 
-	valueMap := StructToMap(value)
+	valueMap := structToMap(value)
 
 	for _, validator := range s.validators {
 		if !validator.ValidateFunc(valueMap) {
@@ -81,7 +82,7 @@ func (s *ObjectSchema) Parse(value any) *ValidationResult {
 	return res
 }
 
-func StructToMap(item interface{}) map[string]interface{} {
+func structToMap(item interface{}) map[string]interface{} {
 	result := map[string]interface{}{}
 
 	val := reflect.ValueOf(item)

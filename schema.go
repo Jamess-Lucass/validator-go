@@ -69,3 +69,11 @@ func (s *Schema[T]) Parse(value any) *ValidationResult {
 
 	return res
 }
+
+func formatPath(key string, path string) string {
+	if path != "" {
+		return fmt.Sprintf("%s.%s", key, path)
+	}
+
+	return key
+}
