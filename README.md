@@ -21,6 +21,7 @@
 - [Literals](#literals)
 - [Strings](#strings)
 - [Ints](#ints)
+- [Float64](#float64)
 - [Booleans](#booleans)
 - [Objects](#objects)
 - [Arrays](#arrays)
@@ -135,6 +136,10 @@ schema.Int().Nonpositive() // <= 0
 
 schema.Int().MultipleOf(2)
 ```
+
+## Float64
+
+The same methods are available on `Float64` as [ints](#ints)
 
 ## Booleans
 
