@@ -137,7 +137,7 @@ schema.Int().Nonpositive() // <= 0
 schema.Int().MultipleOf(2)
 ```
 
-## Float 64
+## Float64
 
 The same methods are available on `Float64` as [ints](#ints)
 
