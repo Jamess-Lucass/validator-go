@@ -6,24 +6,38 @@ import (
 	"strconv"
 )
 
-type ArraySchema struct {
-	Schema[[]interface{}]
+type ArraySchema[T any] struct {
+	Schema[[]any]
 	schema ISchema
 }
 
-var _ ISchema = (*ArraySchema)(nil)
+var _ ISchema = (*ArraySchema[interface{}])(nil)
 
-func Array(s ISchema) *ArraySchema {
-	return &ArraySchema{schema: s}
+func Array[T any](s ISchema) *ArraySchema[[]T] {
+	return &ArraySchema[[]T]{schema: s}
 }
 
-func (s *ArraySchema) Max(maxLength int) *ArraySchema {
-	validator := Validator[[]interface{}]{
-		MessageFunc: func(value []interface{}) string {
+func (s *ArraySchema[T]) Refine(predicate func(T) bool) *ArraySchema[T] {
+	validator := Validator[T]{
+		MessageFunc: func(value T) string {
+			return "Invalid input"
+		},
+		ValidateFunc: predicate,
+	}
+
+	s.validators = append(s.validators, validator)
+
+	return s
+}
+
+func (s *ArraySchema[T]) Max(maxLength int) *ArraySchema[T] {
+	validator := Validator[T]{
+		MessageFunc: func(value T) string {
 			return fmt.Sprintf("Array must contain at most %d element(s)", maxLength)
 		},
-		ValidateFunc: func(value []interface{}) bool {
-			return len(value) <= maxLength
+		ValidateFunc: func(value T) bool {
+			v := reflect.ValueOf(value)
+			return v.Len() <= maxLength
 		},
 	}
 
@@ -32,58 +46,51 @@ func (s *ArraySchema) Max(maxLength int) *ArraySchema {
 	return s
 }
 
-func (s *ArraySchema) Min(minLength int) *ArraySchema {
-	validator := Validator[[]interface{}]{
-		MessageFunc: func(value []interface{}) string {
+func (s *ArraySchema[T]) Min(minLength int) *ArraySchema[T] {
+	validator := Validator[T]{
+		MessageFunc: func(value T) string {
 			return fmt.Sprintf("Array must contain at least %d element(s)", minLength)
 		},
-		ValidateFunc: func(value []interface{}) bool {
-			return len(value) >= minLength
+		ValidateFunc: func(value T) bool {
+			v := reflect.ValueOf(value)
+			return v.Len() >= minLength
 		},
 	}
 
-	s.validators = append(s.validators, validator)
+	s.Schema.validators = append(s.validators, validator)
 
 	return s
 }
 
-func (s *ArraySchema) Parse(value any) *ValidationResult {
-	t := reflect.TypeOf(value)
-
-	if t == nil || (t.Kind() != reflect.Array && t.Kind() != reflect.Slice) {
-		return &ValidationResult{Errors: []ValidationError{{Path: "", Message: fmt.Sprintf("Expected array, got %T", value)}}}
-	}
-
+func (s *ArraySchema[T]) Parse(value any) *ValidationResult {
 	v := reflect.ValueOf(value)
 
-	val := make([]interface{}, v.Len())
-	for i := 0; i < v.Len(); i++ {
-		val[i] = v.Index(i).Interface()
+	if v.Kind() != reflect.Array && v.Kind() != reflect.Slice {
+		return &ValidationResult{Errors: []ValidationError{{Path: "", Message: fmt.Sprintf("Expected array, got %T", value)}}}
 	}
 
 	// Parse array validations
 	result := &ValidationResult{Errors: []ValidationError{}}
 
 	for _, validator := range s.validators {
-		if !validator.ValidateFunc(val) {
+		if !validator.ValidateFunc(value) {
 			err := ValidationError{
 				Path:    "",
-				Message: validator.MessageFunc(val),
+				Message: validator.MessageFunc(value),
 			}
 
 			result.Errors = append(result.Errors, err)
 		}
 	}
 
-	// Parse schema validations within array for each item
-	for i := 0; i < len(val); i++ {
-		res := s.schema.Parse(val[i])
+	for i := 0; i < v.Len(); i++ {
+		item := v.Index(i).Interface()
+		res := s.schema.Parse(item)
 
 		if !res.IsValid() {
 			for index, err := range res.Errors {
 				res.Errors[index].Path = formatPath(strconv.Itoa(i), err.Path)
 			}
-
 			result.Errors = append(result.Errors, res.Errors...)
 		}
 	}

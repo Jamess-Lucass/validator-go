@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	schema "github.com/Jamess-Lucass/validator-go"
+	"github.com/google/uuid"
 )
 
 type User struct {
@@ -51,4 +52,9 @@ func main() {
 	//5
 	literal := schema.Literal("test").Parse(10)
 	fmt.Printf("(5): is valid: %t\n", literal.IsValid())
+
+	//6
+	schema.Array[uuid.UUID](schema.UUID()).Refine(func(u []uuid.UUID) bool {
+		return true
+	})
 }

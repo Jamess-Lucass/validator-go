@@ -63,7 +63,7 @@ func TestObject_ArrayObject_Path(t *testing.T) {
 	}
 
 	s := schema.Object(map[string]schema.ISchema{
-		"Addresses": schema.Array(schema.Object(map[string]schema.ISchema{
+		"Addresses": schema.Array[map[string]interface{}](schema.Object(map[string]schema.ISchema{
 			"Postcode": schema.String().Min(4),
 		})),
 	}).Parse(User{

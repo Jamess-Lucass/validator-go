@@ -1,10 +1,11 @@
 module github.com/Jamess-Lucass/validator-go
 
-go 1.21
+go 1.22.2
 
 require (
 	github.com/google/uuid v1.6.0
 	github.com/stretchr/testify v1.9.0
+	golang.org/x/exp v0.0.0-20240409090435-93d18d7e34b8
 )
 
 require (

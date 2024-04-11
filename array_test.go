@@ -8,7 +8,7 @@ import (
 )
 
 func TestArray_String_Type(t *testing.T) {
-	s := schema.Array(schema.String())
+	s := schema.Array[string](schema.String())
 
 	assert.True(t, s.Parse([]string{"one", "two"}).IsValid())
 	assert.True(t, s.Parse([]string{""}).IsValid())
@@ -29,14 +29,14 @@ func TestArray_String_Type(t *testing.T) {
 }
 
 func TestArray_Path(t *testing.T) {
-	s := schema.Array(schema.String().Min(4)).Parse([]string{"one"})
+	s := schema.Array[string](schema.String().Min(4)).Parse([]string{"one"})
 
 	assert.Len(t, s.Errors, 1)
 	assert.Equal(t, "0", s.Errors[0].Path)
 }
 
 func TestArray_String(t *testing.T) {
-	s := schema.Array(schema.String().Min(4).StartsWith("a"))
+	s := schema.Array[string](schema.String().Min(4).StartsWith("a"))
 
 	assert.True(t, s.Parse([]string{"aour", "aive"}).IsValid())
 	assert.True(t, s.Parse([]string{"aour"}).IsValid())
@@ -51,7 +51,7 @@ func TestArray_String(t *testing.T) {
 }
 
 func TestArray_Min(t *testing.T) {
-	s := schema.Array(schema.String()).Min(1)
+	s := schema.Array[string](schema.String()).Min(1)
 
 	assert.True(t, s.Parse([]string{"aour", "aive"}).IsValid())
 	assert.True(t, s.Parse([]string{"aour"}).IsValid())
@@ -60,7 +60,7 @@ func TestArray_Min(t *testing.T) {
 }
 
 func TestArray_Max(t *testing.T) {
-	s := schema.Array(schema.String()).Max(1)
+	s := schema.Array[string](schema.String()).Max(1)
 
 	assert.True(t, s.Parse([]string{"aour"}).IsValid())
 	assert.True(t, s.Parse([]string{}).IsValid())
@@ -73,9 +73,13 @@ func TestArray_Object(t *testing.T) {
 		Firstname string
 	}
 
-	s := schema.Array(schema.Object(map[string]schema.ISchema{
+	type MySchema struct {
+		FirstaName string
+	}
+
+	s := schema.Array[string](schema.Object(map[string]schema.ISchema{
 		"Firstname": schema.String().Min(4),
-	}))
+	})).Min(10)
 
 	val := []User{
 		{Firstname: "1234"},
@@ -90,7 +94,7 @@ func TestArray_Object_Path(t *testing.T) {
 		Firstname string
 	}
 
-	s := schema.Array(schema.Object(map[string]schema.ISchema{
+	s := schema.Array[User](schema.Object(map[string]schema.ISchema{
 		"Firstname": schema.String().Min(4),
 	})).Parse([]User{
 		{Firstname: "123"},
