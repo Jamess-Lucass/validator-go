@@ -2,6 +2,7 @@ package schema_test
 
 import (
 	"testing"
+	"time"
 
 	schema "github.com/Jamess-Lucass/validator-go"
 	"github.com/stretchr/testify/assert"
@@ -9,16 +10,18 @@ import (
 
 func TestObject_Type(t *testing.T) {
 	type User struct {
-		Firstname string
-		Lastname  string
+		Firstname   string
+		Lastname    string
+		DateOfBirth time.Time
 	}
 
 	s := schema.Object(map[string]schema.ISchema{
-		"Firstname": schema.String().Min(2),
-		"Lastname":  schema.String().StartsWith("d"),
+		"Firstname":   schema.String().Min(2),
+		"Lastname":    schema.String().StartsWith("d"),
+		"DateOfBirth": schema.Time(),
 	})
 
-	assert.True(t, s.Parse(User{Firstname: "john", Lastname: "doe"}).IsValid())
+	assert.True(t, s.Parse(User{Firstname: "john", Lastname: "doe", DateOfBirth: time.Now().UTC()}).IsValid())
 
 	assert.False(t, s.Parse(User{Firstname: "john", Lastname: ""}).IsValid())
 	assert.False(t, s.Parse(User{Firstname: "", Lastname: "doe"}).IsValid())
