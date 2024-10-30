@@ -103,6 +103,7 @@ func TestString_EndsWith(t *testing.T) {
 	assert.False(t, s.Parse("TEST").IsValid())
 	assert.False(t, s.Parse("3tes3t").IsValid())
 }
+
 func TestString_Optional(t *testing.T) {
 	s := schema.String().Includes("test").Optional()
 
@@ -128,7 +129,5 @@ func TestString_Optional(t *testing.T) {
 
 	v4 := 123
 	assert.False(t, s.Parse(v4).IsValid()) // Invalid type
-
-	v5 := 123
-	assert.False(t, s.Parse(&v5).IsValid()) // Pointer to invalid type
+	assert.False(t, s.Parse(&v4).IsValid()) // Pointer to invalid type
 }
