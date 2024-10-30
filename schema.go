@@ -28,6 +28,7 @@ type ISchema interface {
 
 type Schema[T any] struct {
 	validators []Validator[T]
+	isOptional *bool
 }
 
 type Validator[T any] struct {
@@ -48,13 +49,40 @@ func (s *Schema[T]) Refine(predicate func(T) bool) *Schema[T] {
 	return s
 }
 
+func (s *Schema[T]) IsOptional() bool {
+	if s.isOptional == nil {
+		return false
+	}
+	return *s.isOptional
+}
+
+func (s *Schema[T]) Optional() *Schema[T] {
+	a := true
+	s.isOptional = &a
+	return s
+}
+
 func (s *Schema[T]) Parse(value any) *ValidationResult {
 	val, ok := value.(T)
-	if !ok {
-		return &ValidationResult{Errors: []ValidationError{{Path: "", Message: fmt.Sprintf("Expected %s, received %T", reflect.TypeOf(val).String(), value)}}}
+	ptrVal, ptrOk := value.(*T)
+
+	if !s.IsOptional() && !ok {
+		return &ValidationResult{Errors: []ValidationError{{Path: "", Message: fmt.Sprintf("Expected %s, received %T", reflect.TypeOf((*T)(nil)).Elem().String(), value)}}}
+	}
+
+	if s.IsOptional() && !ptrOk && !ok {
+		return &ValidationResult{Errors: []ValidationError{{Path: "", Message: fmt.Sprintf("Expected %s, received %T", reflect.TypeOf((*T)(nil)).Elem().String(), value)}}}
 	}
 
 	res := &ValidationResult{Errors: []ValidationError{}}
+
+	if s.IsOptional() && ptrVal == nil && ptrOk {
+		return res
+	}
+
+	if !ok && ptrOk {
+		val = *ptrVal
+	}
 
 	for _, validator := range s.validators {
 		if !validator.ValidateFunc(val) {
