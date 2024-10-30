@@ -66,11 +66,7 @@ func (s *Schema[T]) Parse(value any) *ValidationResult {
 	val, ok := value.(T)
 	ptrVal, ptrOk := value.(*T)
 
-	if !s._IsOptional() && !ok {
-		return &ValidationResult{Errors: []ValidationError{{Path: "", Message: fmt.Sprintf("Expected %s, received %T", reflect.TypeOf((*T)(nil)).Elem().String(), value)}}}
-	}
-
-	if s._IsOptional() && !ptrOk && !ok {
+	if (!s._IsOptional() && !ok) || (s._IsOptional() && !ptrOk && !ok) {
 		return &ValidationResult{Errors: []ValidationError{{Path: "", Message: fmt.Sprintf("Expected %s, received %T", reflect.TypeOf((*T)(nil)).Elem().String(), value)}}}
 	}
 
