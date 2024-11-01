@@ -28,7 +28,7 @@ type ISchema interface {
 
 type Schema[T any] struct {
 	validators []Validator[T]
-	isOptional *bool
+	isOptional bool
 }
 
 type Validator[T any] struct {
