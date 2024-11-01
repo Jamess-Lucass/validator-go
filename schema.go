@@ -49,7 +49,6 @@ func (s *Schema[T]) Refine(predicate func(T) bool) *Schema[T] {
 	return s
 }
 
-
 func (s *Schema[T]) Optional() *Schema[T] {
 	s.isOptional = true
 	return s
@@ -59,13 +58,13 @@ func (s *Schema[T]) Parse(value any) *ValidationResult {
 	val, ok := value.(T)
 	ptrVal, ptrOk := value.(*T)
 
-	if (!s._IsOptional() && !ok) || (!ptrOk && !ok) {
+	if !ptrOk && !ok {
 		return &ValidationResult{Errors: []ValidationError{{Path: "", Message: fmt.Sprintf("Expected %s, received %T", reflect.TypeOf((*T)(nil)).Elem().String(), value)}}}
 	}
 
 	res := &ValidationResult{Errors: []ValidationError{}}
 
-	if s._IsOptional() && ptrVal == nil && ptrOk {
+	if s.isOptional && ptrVal == nil && ptrOk {
 		return res
 	}
 

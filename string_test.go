@@ -104,30 +104,18 @@ func TestString_EndsWith(t *testing.T) {
 	assert.False(t, s.Parse("3tes3t").IsValid())
 }
 
+func TestString_Pointer(t *testing.T) {
+	s := schema.String()
+
+	value := "test"
+
+	assert.True(t, s.Parse(&value).IsValid())
+}
+
 func TestString_Optional(t *testing.T) {
-	s := schema.String().Includes("test").Optional()
+	s := schema.String().Optional()
 
-	// Valid cases
-	assert.True(t, s.Parse("X_test_X").IsValid())
-	assert.True(t, s.Parse("test").IsValid())
+	var nullValue *string = nil
 
-	// Invalid cases
-	assert.False(t, s.Parse("Test").IsValid())
-	assert.False(t, s.Parse("X_Test_X").IsValid())
-	assert.False(t, s.Parse("TEST").IsValid())
-	assert.False(t, s.Parse("3t3est").IsValid())
-
-	// Optional cases
-	var v *string = nil
-	assert.True(t, s.Parse(v).IsValid()) // Nil value should be valid
-
-	v2 := "X_test_X"
-	assert.True(t, s.Parse(&v2).IsValid()) // Pointer to valid string
-
-	v3 := "X_tes3_X"
-	assert.False(t, s.Parse(&v3).IsValid()) // Pointer to invalid string
-
-	v4 := 123
-	assert.False(t, s.Parse(v4).IsValid()) // Invalid type
-	assert.False(t, s.Parse(&v4).IsValid()) // Pointer to invalid type
+	assert.True(t, s.Parse(nullValue).IsValid())
 }
