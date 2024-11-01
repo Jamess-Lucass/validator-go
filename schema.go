@@ -58,7 +58,7 @@ func (s *Schema[T]) Parse(value any) *ValidationResult {
 	val, ok := value.(T)
 	ptrVal, ptrOk := value.(*T)
 
-	if !ptrOk && !ok {
+	if !ptrOk && !ok || (ptrOk && ptrVal == nil && !s.isOptional) {
 		return &ValidationResult{Errors: []ValidationError{{Path: "", Message: fmt.Sprintf("Expected %s, received %T", reflect.TypeOf((*T)(nil)).Elem().String(), value)}}}
 	}
 
