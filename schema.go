@@ -49,12 +49,6 @@ func (s *Schema[T]) Refine(predicate func(T) bool) *Schema[T] {
 	return s
 }
 
-func (s *Schema[T]) _IsOptional() bool {
-	if s.isOptional == nil {
-		return false
-	}
-	return *s.isOptional
-}
 
 func (s *Schema[T]) Optional() *Schema[T] {
 	s.isOptional = true
