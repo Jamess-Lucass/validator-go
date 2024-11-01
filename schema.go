@@ -58,8 +58,11 @@ func (s *Schema[T]) Parse(value any) *ValidationResult {
 	val, ok := value.(T)
 	ptrVal, ptrOk := value.(*T)
 
-	if !ptrOk && !ok || (ptrOk && ptrVal == nil && !s.isOptional) {
+	if !ptrOk && !ok {
 		return &ValidationResult{Errors: []ValidationError{{Path: "", Message: fmt.Sprintf("Expected %s, received %T", reflect.TypeOf((*T)(nil)).Elem().String(), value)}}}
+	}
+	if ptrOk && ptrVal == nil && !s.isOptional {
+		return &ValidationResult{Errors: []ValidationError{{Path: "", Message: "Value cannot be nil"}}}
 	}
 
 	res := &ValidationResult{Errors: []ValidationError{}}

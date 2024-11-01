@@ -125,5 +125,6 @@ func TestString_NotOptional(t *testing.T) {
 
 	var nullValue *string = nil
 
+	t.Log(s.Parse(nullValue).Errors)
 	assert.False(t, s.Parse(nullValue).IsValid())
 }
