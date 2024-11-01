@@ -57,8 +57,7 @@ func (s *Schema[T]) _IsOptional() bool {
 }
 
 func (s *Schema[T]) Optional() *Schema[T] {
-	a := true
-	s.isOptional = &a
+	s.isOptional = true
 	return s
 }
 
