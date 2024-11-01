@@ -67,7 +67,6 @@ func (s *Schema[T]) Parse(value any) *ValidationResult {
 	if s.isOptional && ptrVal == nil && ptrOk {
 		return res
 	}
-
 	if !ok && ptrOk {
 		val = *ptrVal
 	}

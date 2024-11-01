@@ -119,3 +119,11 @@ func TestString_Optional(t *testing.T) {
 
 	assert.True(t, s.Parse(nullValue).IsValid())
 }
+
+func TestString_NotOptional(t *testing.T) {
+	s := schema.String()
+
+	var nullValue *string = nil
+
+	assert.False(t, s.Parse(nullValue).IsValid())
+}
