@@ -104,14 +104,14 @@ func TestString_EndsWith(t *testing.T) {
 	assert.False(t, s.Parse("3tes3t").IsValid())
 }
 
-type CatalogueMarginLevel string
-type CatalogueMargin int
+type catalogueMarginLevel string
+type catalogueMargin int
 
 func TestString_CustomPrimitive(t *testing.T) {
 	s := schema.String()
 
-	v := CatalogueMarginLevel("eebofleebo")
-	x := CatalogueMargin(123)
+	v := catalogueMarginLevel("eebofleebo")
+	x := catalogueMargin(123)
 
 	assert.True(t, s.Parse(v).IsValid())
 	assert.False(t, s.Parse(x).IsValid())
