@@ -49,8 +49,9 @@ func (s *Schema[T]) Refine(predicate func(T) bool) *Schema[T] {
 }
 
 func (s *Schema[T]) Parse(value any) *ValidationResult {
+	t := reflect.ValueOf(value).Kind().String()
 	val, ok := value.(T)
-	if !ok {
+	if !ok && t != reflect.TypeOf(val).String() {
 		return &ValidationResult{Errors: []ValidationError{{Path: "", Message: fmt.Sprintf("Expected %s, received %T", reflect.TypeOf(val).String(), value)}}}
 	}
 
