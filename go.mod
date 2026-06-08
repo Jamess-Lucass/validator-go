@@ -1,6 +1,6 @@
 module github.com/Jamess-Lucass/validator-go
 
-go 1.21
+go 1.18
 
 require (
 	github.com/google/uuid v1.6.0

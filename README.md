@@ -1,257 +1,264 @@
 <p align="center">
-  <h1 align="center">Validator-go</h1>
-  <p align="center">
-    <br/>
-    <a href="https://github.com/colinhacks/zod">Zod</a> inspired schema validation in Go.
-  </p>
+  <h1 align="center">validator-go</h1>
+  <p align="center">FluentValidation-style struct validation for Go.</p>
 </p>
 <br/>
 <p align="center">
-<a href="https://github.com/Jamess-Lucass/validator-go/actions?query=branch%3Amain"><img src="https://github.com/Jamess-Lucass/validator-go/actions/workflows/test.yml/badge.svg?event=push&branch=main" alt="CI Test Status" /></a>
-<a href="https://opensource.org/licenses/MIT" rel="nofollow"><img src="https://img.shields.io/github/license/Jamess-Lucass/validator-go" alt="License"></a>
+<a href="https://github.com/Jamess-Lucass/validator-go/actions?query=branch%3Amain"><img src="https://github.com/Jamess-Lucass/validator-go/actions/workflows/ci.yml/badge.svg?event=push&branch=main" alt="CI" /></a>
+<a href="https://pkg.go.dev/github.com/Jamess-Lucass/validator-go"><img src="https://pkg.go.dev/badge/github.com/Jamess-Lucass/validator-go.svg" alt="Go Reference"></a>
+<a href="https://opensource.org/licenses/Apache-2.0" rel="nofollow"><img src="https://img.shields.io/github/license/Jamess-Lucass/validator-go" alt="License"></a>
 </p>
-
-## Table of contents
-
-- [Table of contents](#table-of-contents)
-- [Introduction](#introduction)
-- [Installation](#installation)
-- [Basic usage](#basic-usage)
-- [Primitives](#primitives)
-- [Literals](#literals)
-- [Strings](#strings)
-- [Ints](#ints)
-- [Float64](#float64)
-- [Booleans](#booleans)
-- [Objects](#objects)
-- [Arrays](#arrays)
-- [Schema methods](#schema-methods)
-  - [`.parse`](#parse)
-  - [`.refine`](#refine)
-
-## Introduction
-
-validator-go is a simple and extensible validation library for Go. It's heavily inspired by [Zod](https://github.com/colinhacks/zod) and shares a lot of the same interfaces. This library provides a set of validation schemas for different data types, such as integers, strings, and booleans, and allows you to refine these schemas with custom validation rules.
 
 ## Installation
 
-Ensure you have Go installed ([download](https://go.dev/dl/)). Version `1.21` or higher is required.
-
 ```bash
-go get -u github.com/Jamess-Lucass/validator-go
+go get github.com/Jamess-Lucass/validator-go
 ```
 
-## Basic usage
+Requires Go 1.18+.
 
-Creating a string schema
+## Quick Start
 
-```go
-import (
-    schema "github.com/Jamess-Lucass/validator-go"
-)
-
-// Creating a schema for strings
-mySchema := schema.String();
-
-// Parsing
-mySchema.Parse("john"); // => *schema.ValidationResult
-mySchema.Parse("john").IsValid(); // => true
-mySchema.Parse(12).Errors; // => []
-
-mySchema.Parse(12).IsValid(); // => false
-mySchema.Parse(12).Errors; // => [{ "path": "", "message": "Expected string, received int" }]
-```
-
-Creating an object schema
+Create a validator for a struct pointer, declare rules against its fields, then
+call `Validate`:
 
 ```go
-import (
-    schema "github.com/Jamess-Lucass/validator-go"
-)
-
-// Creating a schema for an object
-mySchema := schema.Object(map[string]schema.ISchema{
-    "Username": schema.String().Min(5),
-})
-
-// Parsing
 type User struct {
-    Username string
+    Name  string `json:"name"`
+    Email string `json:"email"`
+    Age   int    `json:"age"`
 }
 
-user1 := User{
-    Username: "john_doe",
+user := User{Name: "J", Email: "bad", Age: -1}
+
+v, err := validator.New(&user)
+if err != nil {
+    // &user must be a non-nil pointer to a struct
+    return
 }
+v.String(&user.Name).NotEmpty().Min(2).Max(50)
+v.String(&user.Email).NotEmpty().Email()
+v.Int(&user.Age).Gte(0).Lte(150)
 
-mySchema.Parse(user1).IsValid(); // => true
-mySchema.Parse(user1).Errors; // => []
+result := v.Validate()
 
-user2 := User{
-    Username: "john",
-}
-mySchema.Parse(user2).IsValid(); // => false
-mySchema.Parse(user2).Errors; // => [{ "path": "Firstname","message": "String must contain at least 5 character(s)" }]
+result.IsValid() // false
+result.Errors    // [{Field: "name", Message: "must be at least 2 characters"}, ...]
 ```
 
-## Primitives
+`New` returns an error if the argument is not a non-nil pointer to a struct.
+Field names are resolved by reflection, preferring the `json` struct tag and
+falling back to the Go field name. Rules read the field's value at `Validate`
+time, so you can declare them up front and mutate the struct in between.
+
+## String
 
 ```go
-schema.String()
-schema.Int()
-schema.Bool()
+v.String(&s.Field).NotEmpty()
+v.String(&s.Field).Min(n)
+v.String(&s.Field).Max(n)
+v.String(&s.Field).Length(min, max)
+v.String(&s.Field).Email()
+v.String(&s.Field).Url()
+v.String(&s.Field).Includes("substr")
+v.String(&s.Field).StartsWith("prefix")
+v.String(&s.Field).EndsWith("suffix")
+v.String(&s.Field).Must(func(val string) bool { return true })
+v.String(&s.Field).WithMessage("custom error")
 ```
 
-## Literals
+`Min`, `Max`, and `Length` count runes (Unicode code points), not bytes.
+
+## Int
 
 ```go
-john := schema.Literal("john");
-four := schema.Literal(4);
-trueSchema := schema.Literal(true);
-```
-
-## Strings
-
-```go
-schema.String().Max(2)
-schema.String().Min(2)
-schema.String().Length(2)
-schema.String().Url()
-schema.String().Includes(string)
-schema.String().StartsWith(string)
-schema.String().EndsWith(string)
-```
-
-## Ints
-
-```go
-schema.Int().Lt(2)
-schema.Int().Lte(2)
-schema.Int().Gt(2)
-schema.Int().Gte(2)
-
-schema.Int().Positive() // > 0
-schema.Int().Nonnegative() // >= 0
-schema.Int().Negative() // < 0
-schema.Int().Nonpositive() // <= 0
-
-schema.Int().MultipleOf(2)
+v.Int(&s.Field).NotEmpty() // must not be zero
+v.Int(&s.Field).Gt(n)
+v.Int(&s.Field).Gte(n)
+v.Int(&s.Field).Lt(n)
+v.Int(&s.Field).Lte(n)
+v.Int(&s.Field).Positive()
+v.Int(&s.Field).Negative()
+v.Int(&s.Field).Nonnegative()
+v.Int(&s.Field).Nonpositive()
+v.Int(&s.Field).MultipleOf(n)
+v.Int(&s.Field).Must(func(val int) bool { return true })
 ```
 
 ## Float64
 
-The same methods are available on `Float64` as [ints](#ints)
-
-## Booleans
-
 ```go
-schema.Bool()
+v.Float64(&s.Field).NotEmpty() // must not be zero
+v.Float64(&s.Field).Gt(n)
+v.Float64(&s.Field).Gte(n)
+v.Float64(&s.Field).Lt(n)
+v.Float64(&s.Field).Lte(n)
+v.Float64(&s.Field).Positive()
+v.Float64(&s.Field).Negative()
+v.Float64(&s.Field).Nonnegative()
+v.Float64(&s.Field).Nonpositive()
+v.Float64(&s.Field).MultipleOf(n)
+v.Float64(&s.Field).Must(func(val float64) bool { return true })
 ```
 
-## Objects
+## Bool
 
 ```go
-mySchema := schema.Object(map[string]schema.ISchema{
-    "Username": schema.String().Min(5),
-    "Firstname": schema.String().Min(2).Max(128),
-    "Age": schema.Int().Gte(18),
-    "IsVerified": schema.Bool(),
+v.Bool(&s.Field).NotEmpty() // must be true
+v.Bool(&s.Field).Must(func(val bool) bool { return true })
+```
+
+## Time
+
+```go
+v.Time(&s.Field).NotEmpty() // must not be the zero time
+v.Time(&s.Field).After(t)
+v.Time(&s.Field).Before(t)
+v.Time(&s.Field).Must(func(val time.Time) bool { return true })
+```
+
+## UUID
+
+Validates `github.com/google/uuid` values.
+
+```go
+v.UUID(&s.ID).NotEmpty() // must not be the nil UUID (all zeros)
+v.UUID(&s.ID).Must(func(val uuid.UUID) bool { return val.Version() == 4 })
+v.UUID(&s.ID).WithMessage("custom error")
+```
+
+## Slice
+
+`Slice` is a free function because Go methods cannot have type parameters.
+
+```go
+validator.Slice(v, &s.Tags).NotNil()  // fails on a nil slice (distinct from empty)
+validator.Slice(v, &s.Tags).NotEmpty()
+validator.Slice(v, &s.Tags).Min(n)
+validator.Slice(v, &s.Tags).Max(n)
+validator.Slice(v, &s.Tags).Length(min, max)
+validator.Slice(v, &s.Tags).Must(func(val []string) bool { return true })
+
+// Validate each primitive element
+validator.Slice(v, &s.Tags).EachValue(validator.String().NotEmpty().Min(2))
+
+// Validate each struct element
+validator.Slice(v, &s.Items).Each(func(item *Item, sv *validator.Validator) {
+    sv.String(&item.Name).NotEmpty()
+    sv.Int(&item.Quantity).Gte(1)
 })
 ```
 
-## Arrays
+## Nullable Fields
 
-The array schema accepts any type that implements the `ISchema` interface, this allows you to parse in other schema.
+Pointer fields (`*string`, `*int`, `*time.Time`, ...) are skipped when nil. Pass
+the pointer directly and use `NotNil()` to require a value.
 
 ```go
-mySchema := schema.Array(schema.String().Min(2)).Max(4)
+type Order struct {
+    Notes       *string    `json:"notes"`
+    ScheduledAt *time.Time `json:"scheduled_at"`
+}
+
+v, _ := validator.New(&order)
+v.String(order.Notes).Min(1).Max(500)                       // skipped if nil
+v.Time(order.ScheduledAt).NotNil().WithName("scheduled_at") // error if nil
 ```
 
-The above schema defines an array of strings, each of which has a minimum length of 2, with the overall array max length of 4.
+A nil pointer has no address, so its field name cannot be resolved by
+reflection — the error's `Field` falls back to `"unknown"`. Pair `NotNil()` with
+`WithName("...")` (available on every rule type) to give such fields a stable
+name in the error output.
 
-You may utilize array and object to construct a more advanced schema
+## Nested & Embedded Structs
 
-```go
-mySchema := schema.Object(map[string]schema.ISchema{
-    "Username": schema.String().Min(5),
-    "Firstname": schema.String().Min(2).Max(128),
-    "Age": schema.Int().Gte(18),
-    "Addresses": schema.Array(schema.Object(map[string]schema.ISchema{
-        "Postcode": schema.String().Min(4).Max(10),
-        "Country": schema.String().Length(2),
-    })),
-})
-```
-
-## Schema methods
-
-All schemas contain certain methods.
-
-### `.Parse`
-
-Given any schema, you may call the `.Parse` method and pass through any data to check it's validity against the schema.
+Nested struct fields resolve with dot-notation. Embedded struct fields resolve
+without a prefix.
 
 ```go
-mySchema := schema.String()
+type Address struct {
+    City string `json:"city"`
+}
 
-mySchema.Parse("john"); // => *schema.ValidationResult
-
-mySchema.Parse("john").IsValid(); // => true
-mySchema.Parse(2).Errors; // => []
-
-mySchema.Parse(2).IsValid(); // => false
-mySchema.Parse(2).Errors; // => [{ "path": "", "message": "Expected string, received int" }]
-```
-
-### `.Refine`
-
-You may provide custom validation logic with the `.Refine` method. This method must return `true` or `false` to represent whether validation should be considered successful or unsuccessful.
-
-```go
-mySchema := schema.String().Refine(func(value string) bool {
-    return value == "custom_value"
-})
-```
-
-This is helpful if you need to perform some business-level validation. For example, checking a database for some value or making a HTTP request to assert something.
-
-```go
-verifiedUserSchema := schema.String().Refine(func(value string) bool {
-    // Fetch user from data.
-    // ensure `is_verified` field is true.
-    return true
-})
-```
-
-This may also be used in conjunction with `.Object`
-
-```go
 type User struct {
-    Firstname string
-    Lastname  string
-    Age       int
+    Base                       // embedded: fields resolve as "id", "created_at"
+    Name    string  `json:"name"`
+    Address Address `json:"address"` // nested: resolves as "address.city"
 }
 
-user := User{
-    Firstname: "john",
-    Lastname:  "doe",
-    Age:       10,
-}
-
-mySchema := schema.Object(map[string]schema.ISchema{
-    "Firstname": schema.String().Refine(func(value string) bool {
-        return value == "john" || value == "jane"
-    }),
-    "Lastname": schema.String().Refine(func(value string) bool {
-        return strings.Contains(value, "doe")
-    }),
-    "Age": schema.Int().Lt(10),
-}).Refine(func(value map[string]interface{}) bool {
-    if value["Firstname"] == "jane" {
-        if age, ok := value["Age"].(int); ok {
-            return age < 5
-        }
-    }
-
-    return true
-})
+v, _ := validator.New(&user)
+v.String(&user.Name).NotEmpty()
+v.String(&user.Address.City).NotEmpty().Min(2) // error field: "address.city"
 ```
+
+## Custom Validation
+
+```go
+v.String(&s.Code).Must(func(val string) bool {
+    return strings.HasPrefix(val, "PRJ-")
+}).WithMessage("must start with PRJ-")
+```
+
+`WithMessage` applies to the preceding rule.
+
+## Cross-Field & Conditional Validation
+
+Use plain Go control flow:
+
+```go
+v, _ := validator.New(&order)
+
+if order.Express {
+    v.Time(order.ScheduledAt).NotNil().WithName("scheduled_at").WithMessage("required for express orders")
+}
+
+if order.ScheduledAt != nil {
+    v.Time(&order.ExpiresAt).Must(func(t time.Time) bool {
+        return t.After(*order.ScheduledAt)
+    }).WithMessage("must be after scheduled_at")
+}
+
+result := v.Validate()
+```
+
+## Map Validation
+
+For unstructured data (`map[string]any`) such as webhooks or dynamic forms, use
+`NewMap` and declare a rule per key. Numbers decoded from JSON arrive as
+`float64`; the numeric rules accept any numeric kind.
+
+```go
+v := validator.NewMap(payload)
+v.Field("email", validator.String().NotEmpty().Email())
+v.Field("age", validator.Int().Gte(18))
+v.Field("address", validator.Map(func(mv *validator.MapV) {
+    mv.Field("city", validator.String().NotEmpty().Min(2))
+    mv.Field("country", validator.String().NotEmpty())
+}).NotNil())
+v.Field("tags", validator.SliceOf(validator.String().NotEmpty()).Min(1).Max(10))
+
+result := v.Validate()
+```
+
+The standalone rule constructors (`validator.String()`, `validator.Int()`, ...)
+implement the `Rule` interface, so the same rules work in maps, in `EachValue`,
+and in `SliceOf`.
+
+## Error Format
+
+```go
+type ValidationError struct {
+    Field   string `json:"field"`   // "name", "address.city", "items[0].price"
+    Message string `json:"message"` // "must not be empty", "must be at least 2 characters"
+}
+
+type ValidationResult struct {
+    Errors []ValidationError
+}
+
+result.IsValid() // true if no errors
+```
+
+## License
+
+[Apache 2.0](LICENSE)

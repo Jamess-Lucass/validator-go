@@ -1,123 +1,143 @@
-package schema
+package validator
 
 import (
 	"fmt"
+	"net/mail"
 	"net/url"
 	"strings"
+	"unicode/utf8"
 )
 
-type StringSchema struct {
-	Schema[string]
+type StringRule struct {
+	fieldBase[string]
 }
 
-var _ ISchema = (*StringSchema)(nil)
-
-func String() *StringSchema {
-	return &StringSchema{}
+func (v *Validator) String(field *string) *StringRule {
+	r := &StringRule{fieldBase[string]{v: v, fieldPtr: field}}
+	v.addRule(r)
+	return r
 }
 
-func (s *StringSchema) Max(maxLength int) *StringSchema {
-	validator := Validator[string]{
-		MessageFunc: func(value string) string {
-			return fmt.Sprintf("String must contain at most %d character(s)", maxLength)
+func String() *StringRule {
+	return &StringRule{}
+}
+
+func (r *StringRule) Validate(value any) []ValidationError {
+	return validateStandalone(r.rules, value, "must be a string", func(v any) (string, bool) {
+		s, ok := v.(string)
+		return s, ok
+	})
+}
+
+// Presence rules
+
+func (r *StringRule) NotNil() *StringRule {
+	r.rules = append(r.rules, rule[string]{isNotNil: true, message: msgNotNil})
+	return r
+}
+
+func (r *StringRule) NotEmpty() *StringRule {
+	r.rules = append(r.rules, rule[string]{
+		validate: func(val string) bool { return val != "" },
+		message:  msgNotEmpty,
+	})
+	return r
+}
+
+// Length rules
+
+func (r *StringRule) Min(n int) *StringRule {
+	r.rules = append(r.rules, rule[string]{
+		validate: func(val string) bool { return utf8.RuneCountInString(val) >= n },
+		message:  fmt.Sprintf("must be at least %d %s", n, pluralize(n, "character")),
+	})
+	return r
+}
+
+func (r *StringRule) Max(n int) *StringRule {
+	r.rules = append(r.rules, rule[string]{
+		validate: func(val string) bool { return utf8.RuneCountInString(val) <= n },
+		message:  fmt.Sprintf("must be at most %d %s", n, pluralize(n, "character")),
+	})
+	return r
+}
+
+func (r *StringRule) Length(min, max int) *StringRule {
+	r.rules = append(r.rules, rule[string]{
+		validate: func(val string) bool {
+			n := utf8.RuneCountInString(val)
+			return n >= min && n <= max
 		},
-		ValidateFunc: func(value string) bool {
-			return len(value) <= maxLength
+		message: fmt.Sprintf("must be between %d and %d characters", min, max),
+	})
+	return r
+}
+
+// Format rules
+
+func (r *StringRule) Email() *StringRule {
+	r.rules = append(r.rules, rule[string]{
+		validate: func(val string) bool {
+			addr, err := mail.ParseAddress(val)
+			return err == nil && addr.Address == val
 		},
+		message: "must be a valid email address",
+	})
+	return r
+}
+
+func (r *StringRule) Url() *StringRule {
+	r.rules = append(r.rules, rule[string]{
+		validate: func(val string) bool {
+			u, err := url.Parse(val)
+			return err == nil && u.Scheme != "" && u.Host != ""
+		},
+		message: "must be a valid URL",
+	})
+	return r
+}
+
+// Content rules
+
+func (r *StringRule) Includes(substr string) *StringRule {
+	r.rules = append(r.rules, rule[string]{
+		validate: func(val string) bool { return strings.Contains(val, substr) },
+		message:  fmt.Sprintf("must contain \"%s\"", substr),
+	})
+	return r
+}
+
+func (r *StringRule) StartsWith(prefix string) *StringRule {
+	r.rules = append(r.rules, rule[string]{
+		validate: func(val string) bool { return strings.HasPrefix(val, prefix) },
+		message:  fmt.Sprintf("must start with \"%s\"", prefix),
+	})
+	return r
+}
+
+func (r *StringRule) EndsWith(suffix string) *StringRule {
+	r.rules = append(r.rules, rule[string]{
+		validate: func(val string) bool { return strings.HasSuffix(val, suffix) },
+		message:  fmt.Sprintf("must end with \"%s\"", suffix),
+	})
+	return r
+}
+
+// Custom rules
+
+func (r *StringRule) Must(fn func(string) bool) *StringRule {
+	r.rules = append(r.rules, rule[string]{validate: fn, message: msgNotValid})
+	return r
+}
+
+func (r *StringRule) WithMessage(msg string) *StringRule {
+	if len(r.rules) > 0 {
+		r.rules[len(r.rules)-1].message = msg
 	}
-
-	s.validators = append(s.validators, validator)
-
-	return s
+	return r
 }
 
-func (s *StringSchema) Min(minLength int) *StringSchema {
-	validator := Validator[string]{
-		MessageFunc: func(value string) string {
-			return fmt.Sprintf("String must contain at least %d character(s)", minLength)
-		},
-		ValidateFunc: func(value string) bool {
-			return len(value) >= minLength
-		},
-	}
-
-	s.validators = append(s.validators, validator)
-
-	return s
-}
-
-func (s *StringSchema) Length(length int) *StringSchema {
-	validator := Validator[string]{
-		MessageFunc: func(value string) string {
-			return fmt.Sprintf("String must contain exactly %d character(s)", length)
-		},
-		ValidateFunc: func(value string) bool {
-			return len(value) == length
-		},
-	}
-
-	s.validators = append(s.validators, validator)
-
-	return s
-}
-
-func (s *StringSchema) Url() *StringSchema {
-	validator := Validator[string]{
-		MessageFunc: func(value string) string {
-			return "Invalid url"
-		},
-		ValidateFunc: func(value string) bool {
-			uri, err := url.ParseRequestURI(value)
-			return err == nil && uri.Host != ""
-		},
-	}
-
-	s.validators = append(s.validators, validator)
-
-	return s
-}
-
-func (s *StringSchema) Includes(str string) *StringSchema {
-	validator := Validator[string]{
-		MessageFunc: func(value string) string {
-			return fmt.Sprintf("Invalid input: must include \"%s\"", str)
-		},
-		ValidateFunc: func(value string) bool {
-			return strings.Contains(value, str)
-		},
-	}
-
-	s.validators = append(s.validators, validator)
-
-	return s
-}
-
-func (s *StringSchema) StartsWith(str string) *StringSchema {
-	validator := Validator[string]{
-		MessageFunc: func(value string) string {
-			return fmt.Sprintf("Invalid input: must start with \"%s\"", str)
-		},
-		ValidateFunc: func(value string) bool {
-			return strings.HasPrefix(value, str)
-		},
-	}
-
-	s.validators = append(s.validators, validator)
-
-	return s
-}
-
-func (s *StringSchema) EndsWith(str string) *StringSchema {
-	validator := Validator[string]{
-		MessageFunc: func(value string) string {
-			return fmt.Sprintf("Invalid input: must end with \"%s\"", str)
-		},
-		ValidateFunc: func(value string) bool {
-			return strings.HasSuffix(value, str)
-		},
-	}
-
-	s.validators = append(s.validators, validator)
-
-	return s
+func (r *StringRule) WithName(name string) *StringRule {
+	r.name = name
+	return r
 }

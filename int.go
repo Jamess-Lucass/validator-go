@@ -1,148 +1,164 @@
-package schema
+package validator
 
-import "fmt"
+import (
+	"fmt"
+	"math"
+	"reflect"
+)
 
-type IntSchema struct {
-	Schema[int]
+type IntRule struct {
+	fieldBase[int]
 }
 
-var _ ISchema = (*IntSchema)(nil)
-
-func Int() *IntSchema {
-	return &IntSchema{}
+func (v *Validator) Int(field *int) *IntRule {
+	r := &IntRule{fieldBase[int]{v: v, fieldPtr: field}}
+	v.addRule(r)
+	return r
 }
 
-func (s *IntSchema) Lt(min int) *IntSchema {
-	validator := Validator[int]{
-		MessageFunc: func(value int) string {
-			return fmt.Sprintf("Int must be less than %d", min)
-		},
-		ValidateFunc: func(value int) bool {
-			return value < min
-		},
+func Int() *IntRule { return &IntRule{} }
+
+func (r *IntRule) Validate(value any) []ValidationError {
+	return validateStandalone(r.rules, value, "must be an integer", coerceInt)
+}
+
+// coerceInt converts any integer-valued number to int. A float with a
+// fractional part is rejected.
+func coerceInt(value any) (int, bool) {
+	rv := reflect.ValueOf(value)
+	switch rv.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return int(rv.Int()), true
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		u := rv.Uint()
+		if u > uint64(math.MaxInt) {
+			return 0, false
+		}
+		return int(u), true
+	case reflect.Float32, reflect.Float64:
+		f := rv.Float()
+		if math.IsNaN(f) || math.IsInf(f, 0) || f != math.Floor(f) {
+			return 0, false
+		}
+		return int(f), true
+	default:
+		return 0, false
 	}
-
-	s.validators = append(s.validators, validator)
-
-	return s
 }
 
-func (s *IntSchema) Lte(min int) *IntSchema {
-	validator := Validator[int]{
-		MessageFunc: func(value int) string {
-			return fmt.Sprintf("Int must be less than or equal to %d", min)
-		},
-		ValidateFunc: func(value int) bool {
-			return value <= min
-		},
-	}
+// Presence rules
 
-	s.validators = append(s.validators, validator)
-
-	return s
+func (r *IntRule) NotNil() *IntRule {
+	r.rules = append(r.rules, rule[int]{isNotNil: true, message: msgNotNil})
+	return r
 }
 
-func (s *IntSchema) Gt(min int) *IntSchema {
-	validator := Validator[int]{
-		MessageFunc: func(value int) string {
-			return fmt.Sprintf("Int must be greater than %d", min)
-		},
-		ValidateFunc: func(value int) bool {
-			return value > min
-		},
-	}
-
-	s.validators = append(s.validators, validator)
-
-	return s
+func (r *IntRule) NotEmpty() *IntRule {
+	r.rules = append(r.rules, rule[int]{
+		validate: func(val int) bool { return val != 0 },
+		message:  msgNotEmpty,
+	})
+	return r
 }
 
-func (s *IntSchema) Gte(min int) *IntSchema {
-	validator := Validator[int]{
-		MessageFunc: func(value int) string {
-			return fmt.Sprintf("Int must be greater than or equal to %d", min)
-		},
-		ValidateFunc: func(value int) bool {
-			return value >= min
-		},
-	}
+// Comparison rules
 
-	s.validators = append(s.validators, validator)
-
-	return s
+func (r *IntRule) Lt(n int) *IntRule {
+	r.rules = append(r.rules, rule[int]{
+		validate: func(val int) bool { return val < n },
+		message:  fmt.Sprintf("must be less than %d", n),
+	})
+	return r
 }
 
-func (s *IntSchema) Positive() *IntSchema {
-	validator := Validator[int]{
-		MessageFunc: func(value int) string {
-			return "Int must be greater than 0"
-		},
-		ValidateFunc: func(value int) bool {
-			return value > 0
-		},
-	}
-
-	s.validators = append(s.validators, validator)
-
-	return s
+func (r *IntRule) Lte(n int) *IntRule {
+	r.rules = append(r.rules, rule[int]{
+		validate: func(val int) bool { return val <= n },
+		message:  fmt.Sprintf("must be less than or equal to %d", n),
+	})
+	return r
 }
 
-func (s *IntSchema) Nonnegative() *IntSchema {
-	validator := Validator[int]{
-		MessageFunc: func(value int) string {
-			return "Int must be greater than or equal to 0"
-		},
-		ValidateFunc: func(value int) bool {
-			return value >= 0
-		},
-	}
-
-	s.validators = append(s.validators, validator)
-
-	return s
+func (r *IntRule) Gt(n int) *IntRule {
+	r.rules = append(r.rules, rule[int]{
+		validate: func(val int) bool { return val > n },
+		message:  fmt.Sprintf("must be greater than %d", n),
+	})
+	return r
 }
 
-func (s *IntSchema) Negative() *IntSchema {
-	validator := Validator[int]{
-		MessageFunc: func(value int) string {
-			return "Int must be less than 0"
-		},
-		ValidateFunc: func(value int) bool {
-			return value < 0
-		},
-	}
-
-	s.validators = append(s.validators, validator)
-
-	return s
+func (r *IntRule) Gte(n int) *IntRule {
+	r.rules = append(r.rules, rule[int]{
+		validate: func(val int) bool { return val >= n },
+		message:  fmt.Sprintf("must be greater than or equal to %d", n),
+	})
+	return r
 }
 
-func (s *IntSchema) Nonpositive() *IntSchema {
-	validator := Validator[int]{
-		MessageFunc: func(value int) string {
-			return "Int must be less than or equal to 0"
-		},
-		ValidateFunc: func(value int) bool {
-			return value <= 0
-		},
-	}
+// Sign rules
 
-	s.validators = append(s.validators, validator)
-
-	return s
+func (r *IntRule) Positive() *IntRule {
+	r.rules = append(r.rules, rule[int]{
+		validate: func(val int) bool { return val > 0 },
+		message:  msgPositive,
+	})
+	return r
 }
 
-func (s *IntSchema) MultipleOf(multiple int) *IntSchema {
-	validator := Validator[int]{
-		MessageFunc: func(value int) string {
-			return fmt.Sprintf("Int must be a multiple of %d", multiple)
+func (r *IntRule) Negative() *IntRule {
+	r.rules = append(r.rules, rule[int]{
+		validate: func(val int) bool { return val < 0 },
+		message:  msgNegative,
+	})
+	return r
+}
+
+func (r *IntRule) Nonnegative() *IntRule {
+	r.rules = append(r.rules, rule[int]{
+		validate: func(val int) bool { return val >= 0 },
+		message:  msgNonnegative,
+	})
+	return r
+}
+
+func (r *IntRule) Nonpositive() *IntRule {
+	r.rules = append(r.rules, rule[int]{
+		validate: func(val int) bool { return val <= 0 },
+		message:  msgNonpositive,
+	})
+	return r
+}
+
+// Arithmetic rules
+
+func (r *IntRule) MultipleOf(n int) *IntRule {
+	r.rules = append(r.rules, rule[int]{
+		validate: func(val int) bool {
+			if n == 0 {
+				return false
+			}
+			return val%n == 0
 		},
-		ValidateFunc: func(value int) bool {
-			return value%multiple == 0
-		},
+		message: fmt.Sprintf("must be a multiple of %d", n),
+	})
+	return r
+}
+
+// Custom rules
+
+func (r *IntRule) Must(fn func(int) bool) *IntRule {
+	r.rules = append(r.rules, rule[int]{validate: fn, message: msgNotValid})
+	return r
+}
+
+func (r *IntRule) WithMessage(msg string) *IntRule {
+	if len(r.rules) > 0 {
+		r.rules[len(r.rules)-1].message = msg
 	}
+	return r
+}
 
-	s.validators = append(s.validators, validator)
-
-	return s
+func (r *IntRule) WithName(name string) *IntRule {
+	r.name = name
+	return r
 }
