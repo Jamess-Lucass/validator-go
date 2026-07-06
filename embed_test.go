@@ -25,9 +25,9 @@ func TestEmbeddedStruct_FieldNames(t *testing.T) {
 	}
 
 	v, _ := validator.New(&user)
-	v.String(&user.ID).NotEmpty()
-	v.String(&user.Name).NotEmpty()
-	v.Time(&user.CreatedAt).NotEmpty()
+	validator.String(v, &user.ID).NotEmpty()
+	validator.String(v, &user.Name).NotEmpty()
+	validator.Time(v, &user.CreatedAt).NotEmpty()
 	result := v.Validate()
 
 	assert.Len(t, result.Errors, 3)
@@ -56,13 +56,28 @@ func TestEmbeddedStruct_WithNested(t *testing.T) {
 	}
 
 	v, _ := validator.New(&user)
-	v.String(&user.ID).NotEmpty()
-	v.String(&user.Name).NotEmpty()
-	v.String(&user.Address.City).NotEmpty()
+	validator.String(v, &user.ID).NotEmpty()
+	validator.String(v, &user.Name).NotEmpty()
+	validator.String(v, &user.Address.City).NotEmpty()
 	result := v.Validate()
 
 	assert.Len(t, result.Errors, 3)
 	assert.Equal(t, "id", result.Errors[0].Field)
 	assert.Equal(t, "name", result.Errors[1].Field)
 	assert.Equal(t, "address.city", result.Errors[2].Field)
+}
+
+func TestEmbeddedStruct_WithJsonTag(t *testing.T) {
+	type tagged struct {
+		embedBase `json:"base"`
+	}
+
+	// encoding/json nests a tagged embedded struct under the tag, so error
+	// paths follow it too.
+	u := tagged{}
+	v, _ := validator.New(&u)
+	validator.String(v, &u.ID).NotEmpty()
+	result := v.Validate()
+	assert.Len(t, result.Errors, 1)
+	assert.Equal(t, "base.id", result.Errors[0].Field)
 }

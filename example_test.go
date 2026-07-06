@@ -19,9 +19,9 @@ func Example() {
 	if err != nil {
 		panic(err)
 	}
-	v.String(&user.Name).NotEmpty().Min(2)
-	v.String(&user.Email).Email()
-	v.Int(&user.Age).Gte(0)
+	validator.String(v, &user.Name).NotEmpty().Min(2)
+	validator.String(v, &user.Email).Email()
+	validator.Number(v, &user.Age).Gte(0)
 
 	result := v.Validate()
 

@@ -5,20 +5,31 @@ import (
 	"reflect"
 )
 
-type SliceRule[T any] struct {
-	fieldBase[[]T]
+// SliceRule validates a slice field. Named slice types (type Tags []string)
+// work too.
+type SliceRule[S ~[]T, T any] struct {
+	fieldBase[S]
 	eachFn   func(item *T, sv *Validator)
 	eachRule Rule
+
+	// msgTarget and eachMark route WithMessage to whichever check was added last.
+	eachFnMsg  string
+	eachValMsg string
+	msgTarget  *string
+	eachMark   int
 }
 
-// Slice is a free function because Go methods cannot have their own type parameters.
-func Slice[T any](v *Validator, field *[]T) *SliceRule[T] {
-	r := &SliceRule[T]{fieldBase: fieldBase[[]T]{v: v, fieldPtr: field}}
+// Slice validates a slice field. Like every rule it is a free function, since
+// Go methods cannot have their own type parameters. Pass the field address:
+//
+//	validator.Slice(v, &s.Tags).NotEmpty().EachValue(rule.String().NotEmpty())
+func Slice[S ~[]T, T any](v *Validator, field *S) *SliceRule[S, T] {
+	r := &SliceRule[S, T]{fieldBase: fieldBase[S]{v: v, fieldPtr: field}}
 	v.addRule(r)
 	return r
 }
 
-func (r *SliceRule[T]) execute(prefix string) []ValidationError {
+func (r *SliceRule[S, T]) execute(prefix string) []ValidationError {
 	fieldName := r.resolveName(prefix)
 
 	if r.fieldPtr == nil {
@@ -27,21 +38,17 @@ func (r *SliceRule[T]) execute(prefix string) []ValidationError {
 
 	val := *r.fieldPtr
 
-	var errs []ValidationError
-	// A nil slice value behind a non-nil pointer fails NotNil, but length and
-	// element rules still run against it as an empty slice.
-	if val == nil {
-		errs = append(errs, notNilErrors(r.rules, fieldName)...)
-	}
-	errs = append(errs, executeRules(r.rules, val, fieldName, false)...)
+	errs := containerErrors(r.rules, val, val == nil, fieldName)
 
 	if r.eachFn != nil {
 		for i := range val {
 			item := &val[i]
 			sv := &Validator{structPtr: item, prefix: fmt.Sprintf("%s[%d]", fieldName, i)}
 			r.eachFn(item, sv)
-			result := sv.Validate()
-			errs = append(errs, result.Errors...)
+			for _, e := range sv.Validate().Errors {
+				e.Message = orMsg(r.eachFnMsg, e.Message)
+				errs = append(errs, e)
+			}
 		}
 	}
 
@@ -50,22 +57,17 @@ func (r *SliceRule[T]) execute(prefix string) []ValidationError {
 	return errs
 }
 
-// Validate implements Rule for standalone/map-based slice validation.
-// Note: Each(fn) callbacks are only executed in struct context (via execute),
-// not in standalone mode, because they require a struct-based *Validator for field
-// name resolution.
-func (r *SliceRule[T]) Validate(value any) []ValidationError {
+// Validate implements Rule for standalone use. Each callbacks only run in
+// struct mode, where there are field pointers to resolve names against.
+func (r *SliceRule[S, T]) Validate(value any) []ValidationError {
+	value = unwrapPointers(value)
+
 	if value == nil {
-		for _, rl := range r.rules {
-			if rl.isNotNil {
-				return []ValidationError{{Message: rl.message}}
-			}
-		}
-		return nil
+		return executeRules(r.rules, nil, "", true)
 	}
 
 	rv := reflect.ValueOf(value)
-	if rv.Kind() != reflect.Slice {
+	if rv.Kind() != reflect.Slice && rv.Kind() != reflect.Array {
 		return []ValidationError{{Message: msgArray}}
 	}
 
@@ -73,26 +75,32 @@ func (r *SliceRule[T]) Validate(value any) []ValidationError {
 	if s, ok := value.([]T); ok {
 		slice = s
 	} else {
+		var typeErrs []ValidationError
 		for i := 0; i < rv.Len(); i++ {
 			elem := rv.Index(i).Interface()
-			if typed, ok := elem.(T); ok {
-				slice = append(slice, typed)
-			} else {
-				return []ValidationError{{Message: fmt.Sprintf("element [%d] has invalid type", i)}}
+			typed, ok := elem.(T)
+			if !ok {
+				typeErrs = append(typeErrs, ValidationError{
+					Field:   fmt.Sprintf("[%d]", i),
+					Message: "is of the wrong type",
+				})
+				continue
 			}
+			slice = append(slice, typed)
+		}
+		// One wrong typed element means the slice can't be checked as a whole.
+		if len(typeErrs) > 0 {
+			return typeErrs
 		}
 	}
 
-	errs := executeRules(r.rules, slice, "", false)
-	errs = append(errs, r.eachValueErrors(slice, "")...)
+	errs := containerErrors(r.rules, S(slice), rv.Kind() == reflect.Slice && rv.IsNil(), "")
+	errs = append(errs, r.eachValueErrors(S(slice), "")...)
 
 	return errs
 }
 
-// eachValueErrors validates each element with the EachValue rule, prefixing
-// element field names with the slice index so nested errors keep their full
-// path (e.g. "tags[0].name" rather than just "tags[0]").
-func (r *SliceRule[T]) eachValueErrors(slice []T, fieldName string) []ValidationError {
+func (r *SliceRule[S, T]) eachValueErrors(slice S, fieldName string) []ValidationError {
 	if r.eachRule == nil {
 		return nil
 	}
@@ -103,7 +111,7 @@ func (r *SliceRule[T]) eachValueErrors(slice []T, fieldName string) []Validation
 		for _, e := range r.eachRule.Validate(slice[i]) {
 			errs = append(errs, ValidationError{
 				Field:   joinFieldName(index, e.Field),
-				Message: e.Message,
+				Message: orMsg(r.eachValMsg, e.Message),
 			})
 		}
 	}
@@ -111,72 +119,106 @@ func (r *SliceRule[T]) eachValueErrors(slice []T, fieldName string) []Validation
 	return errs
 }
 
-// Length rules
+// Presence rules
 
-func (r *SliceRule[T]) NotNil() *SliceRule[T] {
-	r.rules = append(r.rules, rule[[]T]{isNotNil: true, message: msgNotNil})
+// NotNil fails on a nil slice, which is distinct from an empty one.
+func (r *SliceRule[S, T]) NotNil() *SliceRule[S, T] {
+	r.rules = append(r.rules, rule[S]{isNotNil: true, message: msgNotNil})
 	return r
 }
 
-func (r *SliceRule[T]) NotEmpty() *SliceRule[T] {
-	r.rules = append(r.rules, rule[[]T]{
-		validate: func(val []T) bool { return len(val) > 0 },
+// NotEmpty fails when the slice has no elements.
+func (r *SliceRule[S, T]) NotEmpty() *SliceRule[S, T] {
+	r.rules = append(r.rules, rule[S]{
+		validate: func(val S) bool { return len(val) > 0 },
 		message:  msgNotEmpty,
 	})
 	return r
 }
 
-func (r *SliceRule[T]) Min(n int) *SliceRule[T] {
-	r.rules = append(r.rules, rule[[]T]{
-		validate: func(val []T) bool { return len(val) >= n },
-		message:  fmt.Sprintf("must have at least %d %s", n, pluralize(n, "item")),
+// Length rules
+
+// Min requires at least n elements.
+func (r *SliceRule[S, T]) Min(n int) *SliceRule[S, T] {
+	r.rules = append(r.rules, rule[S]{
+		validate: func(val S) bool { return len(val) >= n },
+		message:  msgMinItems(n),
 	})
 	return r
 }
 
-func (r *SliceRule[T]) Max(n int) *SliceRule[T] {
-	r.rules = append(r.rules, rule[[]T]{
-		validate: func(val []T) bool { return len(val) <= n },
-		message:  fmt.Sprintf("must have at most %d %s", n, pluralize(n, "item")),
+// Max allows at most n elements.
+func (r *SliceRule[S, T]) Max(n int) *SliceRule[S, T] {
+	r.rules = append(r.rules, rule[S]{
+		validate: func(val S) bool { return len(val) <= n },
+		message:  msgMaxItems(n),
 	})
 	return r
 }
 
-func (r *SliceRule[T]) Length(min, max int) *SliceRule[T] {
-	r.rules = append(r.rules, rule[[]T]{
-		validate: func(val []T) bool { return len(val) >= min && len(val) <= max },
-		message:  fmt.Sprintf(msgBetweenItems, min, max),
+// Length requires between min and max elements.
+func (r *SliceRule[S, T]) Length(min, max int) *SliceRule[S, T] {
+	r.rules = append(r.rules, rule[S]{
+		validate: func(val S) bool { return len(val) >= min && len(val) <= max },
+		message:  msgItemsBetween(min, max),
 	})
 	return r
 }
 
 // Iteration rules
 
-func (r *SliceRule[T]) Each(fn func(item *T, sv *Validator)) *SliceRule[T] {
+// Each runs the callback for every element with a sub-validator; errors are
+// prefixed with the index, like "items[2].name". It panics if fn is nil.
+func (r *SliceRule[S, T]) Each(fn func(item *T, sv *Validator)) *SliceRule[S, T] {
+	if fn == nil {
+		panic("validator: Each requires a non-nil callback")
+	}
 	r.eachFn = fn
+	r.eachFnMsg = ""
+	r.msgTarget = &r.eachFnMsg
+	r.eachMark = len(r.rules)
 	return r
 }
 
-func (r *SliceRule[T]) EachValue(rule Rule) *SliceRule[T] {
+// EachValue checks every element against the rule, naming errors by index.
+// It panics if rule is nil.
+func (r *SliceRule[S, T]) EachValue(rule Rule) *SliceRule[S, T] {
+	if isNilRule(rule) {
+		panic("validator: EachValue requires a non-nil rule")
+	}
 	r.eachRule = rule
+	r.eachValMsg = ""
+	r.msgTarget = &r.eachValMsg
+	r.eachMark = len(r.rules)
 	return r
 }
 
 // Custom rules
 
-func (r *SliceRule[T]) Must(fn func([]T) bool) *SliceRule[T] {
-	r.rules = append(r.rules, rule[[]T]{validate: fn, message: msgNotValid})
+// Must runs a custom check against the whole slice. It panics if fn is nil.
+func (r *SliceRule[S, T]) Must(fn func(S) bool) *SliceRule[S, T] {
+	if fn == nil {
+		panic("validator: Must requires a non-nil function")
+	}
+	r.rules = append(r.rules, rule[S]{validate: fn, message: msgNotValid})
 	return r
 }
 
-func (r *SliceRule[T]) WithMessage(msg string) *SliceRule[T] {
+// WithMessage replaces the previous rule's error message. Directly after Each
+// or EachValue it instead replaces the message of every error they produce.
+func (r *SliceRule[S, T]) WithMessage(msg string) *SliceRule[S, T] {
+	if r.msgTarget != nil && len(r.rules) == r.eachMark {
+		*r.msgTarget = msg
+		return r
+	}
 	if len(r.rules) > 0 {
 		r.rules[len(r.rules)-1].message = msg
 	}
 	return r
 }
 
-func (r *SliceRule[T]) WithName(name string) *SliceRule[T] {
+// WithName overrides the field name used in errors.
+func (r *SliceRule[S, T]) WithName(name string) *SliceRule[S, T] {
 	r.name = name
 	return r
 }

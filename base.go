@@ -1,21 +1,52 @@
 package validator
 
 import (
+	"fmt"
 	"reflect"
+	"strings"
 )
 
 const (
-	msgNotNil       = "must not be nil"
-	msgNotEmpty     = "must not be empty"
-	msgNotValid     = "is not valid"
-	msgPositive     = "must be positive"
-	msgNegative     = "must be negative"
-	msgNonnegative  = "must be non-negative"
-	msgNonpositive  = "must be non-positive"
-	msgArray        = "must be an array"
-	msgObject       = "must be an object"
-	msgBetweenItems = "must have between %d and %d items"
+	msgNotNil      = "must not be nil"
+	msgNotEmpty    = "must not be empty"
+	msgNotValid    = "is not valid"
+	msgPositive    = "must be positive"
+	msgNegative    = "must be negative"
+	msgNonnegative = "must be non-negative"
+	msgNonpositive = "must be non-positive"
+	msgArray       = "must be an array"
+	msgObject      = "must be an object"
 )
+
+func msgMinItems(n int) string {
+	return fmt.Sprintf("must have at least %d %s", n, pluralise(n, "item"))
+}
+
+func msgMaxItems(n int) string {
+	return fmt.Sprintf("must have at most %d %s", n, pluralise(n, "item"))
+}
+
+func msgItemsBetween(min, max int) string {
+	return fmt.Sprintf("must have between %d and %d items", min, max)
+}
+
+// Strings are quoted so empty or spaced values stay visible; an empty list
+// falls back to the generic message.
+func msgOneOf[T any](values []T, quoted bool) string {
+	if len(values) == 0 {
+		return msgNotValid
+	}
+
+	parts := make([]string, len(values))
+	for i, v := range values {
+		if quoted {
+			parts[i] = fmt.Sprintf("%q", fmt.Sprint(v))
+		} else {
+			parts[i] = fmt.Sprint(v)
+		}
+	}
+	return "must be one of " + strings.Join(parts, ", ")
+}
 
 type rule[T any] struct {
 	validate func(val T) bool
@@ -23,12 +54,11 @@ type rule[T any] struct {
 	isNotNil bool
 }
 
-// fieldBase holds the shared state and execute logic embedded by every typed
-// rule; the per-type files declare only the type-specific fluent methods.
+// fieldBase carries the state and execute logic shared by every typed rule.
 type fieldBase[T any] struct {
 	v        *Validator
 	fieldPtr *T
-	name     string // explicit name set via WithName; overrides reflection
+	name     string
 	rules    []rule[T]
 }
 
@@ -44,9 +74,6 @@ func (b *fieldBase[T]) execute(prefix string) []ValidationError {
 	return executeRules(b.rules, val, fieldName, isNil)
 }
 
-// resolveName returns the field's error name: an explicit WithName if set,
-// otherwise the name resolved from the struct by reflection. Reflection can't
-// resolve a nil pointer (no address), so WithName is required to name one.
 func (b *fieldBase[T]) resolveName(prefix string) string {
 	if b.name != "" {
 		return joinPrefix(prefix, b.name)
@@ -77,27 +104,37 @@ func executeRules[T any](rules []rule[T], val T, fieldName string, isNil bool) [
 	return errs
 }
 
-// notNilErrors returns an error for every NotNil rule, used when a value is nil
-// but the rules still need to run (e.g. a nil slice behind a non-nil pointer,
-// which fails NotNil yet should still be length-checked as empty).
-func notNilErrors[T any](rules []rule[T], fieldName string) []ValidationError {
+// containerErrors runs rules against a container that exists but may itself
+// be nil: a nil slice or map fails NotNil yet still length checks as empty.
+func containerErrors[T any](rules []rule[T], val T, valIsNil bool, fieldName string) []ValidationError {
 	var errs []ValidationError
 	for _, r := range rules {
 		if r.isNotNil {
+			if valIsNil {
+				errs = append(errs, ValidationError{Field: fieldName, Message: r.message})
+			}
+			continue
+		}
+		if !r.validate(val) {
 			errs = append(errs, ValidationError{Field: fieldName, Message: r.message})
 		}
 	}
 	return errs
 }
 
+func orMsg(override, msg string) string {
+	if override != "" {
+		return override
+	}
+	return msg
+}
+
 func validateStandalone[T any](rules []rule[T], value any, typeErrMsg string, coerce func(any) (T, bool)) []ValidationError {
+	value = unwrapPointers(value)
+
 	if value == nil {
-		for _, r := range rules {
-			if r.isNotNil {
-				return []ValidationError{{Message: r.message}}
-			}
-		}
-		return nil
+		var zero T
+		return executeRules(rules, zero, "", true)
 	}
 
 	val, ok := coerce(value)
@@ -105,40 +142,58 @@ func validateStandalone[T any](rules []rule[T], value any, typeErrMsg string, co
 		return []ValidationError{{Message: typeErrMsg}}
 	}
 
-	var errs []ValidationError
-	for _, r := range rules {
-		if r.isNotNil {
-			continue
-		}
-		if !r.validate(val) {
-			errs = append(errs, ValidationError{Message: r.message})
-		}
+	return executeRules(rules, val, "", false)
+}
+
+// isNilRule catches both nil and a typed nil pointer boxed in the interface.
+func isNilRule(r Rule) bool {
+	if r == nil {
+		return true
 	}
 
-	return errs
+	rv := reflect.ValueOf(r)
+	return rv.Kind() == reflect.Pointer && rv.IsNil()
+}
+
+// unwrapPointers dereferences any level of pointer; a typed nil becomes plain nil.
+func unwrapPointers(value any) any {
+	rv := reflect.ValueOf(value)
+	if rv.Kind() != reflect.Pointer {
+		return value
+	}
+
+	for rv.Kind() == reflect.Pointer {
+		if rv.IsNil() {
+			return nil
+		}
+		rv = rv.Elem()
+	}
+
+	return rv.Interface()
 }
 
 func resolveFieldNameForRule(v *Validator, fieldPtr any, prefix string) string {
 	rv := reflect.ValueOf(fieldPtr)
 
-	// A nil pointer has no address to match against a struct field, so its name
-	// can't be resolved here — fall back to the prefix or "unknown".
-	if v == nil || !rv.IsValid() || (rv.Kind() == reflect.Pointer && rv.IsNil()) {
-		if prefix != "" {
-			return prefix
-		}
-		return "unknown"
+	if v == nil || rv.Kind() != reflect.Pointer || rv.IsNil() {
+		return fallbackName(prefix)
 	}
 
 	name := resolveFieldName(v.structPtr, rv.Pointer())
 	if name == "" {
-		name = "unknown"
+		return fallbackName(prefix)
 	}
 
 	return joinPrefix(prefix, name)
 }
 
-// joinPrefix qualifies a field name with its dot-notation prefix, if any.
+func fallbackName(prefix string) string {
+	if prefix != "" {
+		return prefix
+	}
+	return "unknown"
+}
+
 func joinPrefix(prefix, name string) string {
 	if prefix == "" {
 		return name
@@ -146,8 +201,7 @@ func joinPrefix(prefix, name string) string {
 	return prefix + "." + name
 }
 
-// pluralize returns unit, suffixed with "s" unless n is 1.
-func pluralize(n int, unit string) string {
+func pluralise(n int, unit string) string {
 	if n == 1 {
 		return unit
 	}

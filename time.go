@@ -4,20 +4,20 @@ import (
 	"time"
 )
 
+// TimeRule validates a time.Time field or value.
 type TimeRule struct {
 	fieldBase[time.Time]
 }
 
-func (v *Validator) Time(field *time.Time) *TimeRule {
+// Time validates a time.Time field.
+func Time(v *Validator, field *time.Time) *TimeRule {
 	r := &TimeRule{fieldBase[time.Time]{v: v, fieldPtr: field}}
 	v.addRule(r)
 	return r
 }
 
-func Time() *TimeRule {
-	return &TimeRule{}
-}
-
+// Validate implements Rule for standalone use; the value must be a time.Time
+// or an RFC3339 string.
 func (r *TimeRule) Validate(value any) []ValidationError {
 	return validateStandalone(r.rules, value, "must be a time", func(v any) (time.Time, bool) {
 		switch val := v.(type) {
@@ -35,11 +35,13 @@ func (r *TimeRule) Validate(value any) []ValidationError {
 	})
 }
 
+// NotNil fails when the field pointer or standalone value is nil.
 func (r *TimeRule) NotNil() *TimeRule {
 	r.rules = append(r.rules, rule[time.Time]{isNotNil: true, message: msgNotNil})
 	return r
 }
 
+// NotEmpty fails on the zero time.
 func (r *TimeRule) NotEmpty() *TimeRule {
 	r.rules = append(r.rules, rule[time.Time]{
 		validate: func(val time.Time) bool { return !val.IsZero() },
@@ -48,6 +50,7 @@ func (r *TimeRule) NotEmpty() *TimeRule {
 	return r
 }
 
+// After requires the value to be after t.
 func (r *TimeRule) After(t time.Time) *TimeRule {
 	r.rules = append(r.rules, rule[time.Time]{
 		validate: func(val time.Time) bool { return val.After(t) },
@@ -56,6 +59,7 @@ func (r *TimeRule) After(t time.Time) *TimeRule {
 	return r
 }
 
+// Before requires the value to be before t.
 func (r *TimeRule) Before(t time.Time) *TimeRule {
 	r.rules = append(r.rules, rule[time.Time]{
 		validate: func(val time.Time) bool { return val.Before(t) },
@@ -64,11 +68,16 @@ func (r *TimeRule) Before(t time.Time) *TimeRule {
 	return r
 }
 
+// Must runs a custom check against the value. It panics if fn is nil.
 func (r *TimeRule) Must(fn func(time.Time) bool) *TimeRule {
+	if fn == nil {
+		panic("validator: Must requires a non-nil function")
+	}
 	r.rules = append(r.rules, rule[time.Time]{validate: fn, message: msgNotValid})
 	return r
 }
 
+// WithMessage replaces the previous rule's error message.
 func (r *TimeRule) WithMessage(msg string) *TimeRule {
 	if len(r.rules) > 0 {
 		r.rules[len(r.rules)-1].message = msg
@@ -76,6 +85,7 @@ func (r *TimeRule) WithMessage(msg string) *TimeRule {
 	return r
 }
 
+// WithName overrides the field name used in errors.
 func (r *TimeRule) WithName(name string) *TimeRule {
 	r.name = name
 	return r
