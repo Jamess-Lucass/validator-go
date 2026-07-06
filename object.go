@@ -54,7 +54,7 @@ type ObjectRule struct {
 // Object declares rules for a nested object (map[string]any) inside Field:
 //
 //	v.Field("address", validator.Object(func(mv *validator.ObjectValidator) {
-//		mv.Field("city", validator.String().NotEmpty())
+//		mv.Field("city", rule.String().NotEmpty())
 //	}))
 //
 // For a typed map field on a struct (map[string]string and friends), use Map.
