@@ -1,0 +1,17 @@
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - gocritic
+    - misspell
+    - unconvert
+    - unparam
+    - errchkjson
+    - perfsprint
+    - usestdlibvars
+    - dupword
+    - gosec
+
+run:
+  timeout: 5m

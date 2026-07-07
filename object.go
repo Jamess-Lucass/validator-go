@@ -1,99 +1,108 @@
-package schema
+package validator
 
-import (
-	"fmt"
-	"reflect"
-)
-
-type ObjectSchema struct {
-	value map[string]ISchema
-	Schema[map[string]interface{}]
+// ObjectValidator validates unstructured map[string]any data, declaring one rule per key.
+type ObjectValidator struct {
+	data  map[string]any
+	rules []objectFieldRule
 }
 
-var _ ISchema = (*ObjectSchema)(nil)
-
-func Object(obj map[string]ISchema) *ObjectSchema {
-	return &ObjectSchema{value: obj}
+type objectFieldRule struct {
+	key  string
+	rule Rule
 }
 
-func (s *ObjectSchema) Refine(predicate func(map[string]interface{}) bool) *ObjectSchema {
-	validator := Validator[map[string]interface{}]{
-		MessageFunc: func(value map[string]interface{}) string {
-			return "Invalid input"
-		},
-		ValidateFunc: predicate,
+// NewObject returns a validator for unstructured data such as a decoded JSON
+// payload. Declare rules with Field, then call Validate.
+func NewObject(m map[string]any) *ObjectValidator {
+	return &ObjectValidator{data: m}
+}
+
+// Field declares a rule for one key of the map. It panics if rule is nil.
+func (mv *ObjectValidator) Field(key string, rule Rule) {
+	if isNilRule(rule) {
+		panic("validator: Field requires a non-nil rule")
 	}
-
-	s.validators = append(s.validators, validator)
-
-	return s
+	mv.rules = append(mv.rules, objectFieldRule{key: key, rule: rule})
 }
 
-func (s *ObjectSchema) Parse(value any) *ValidationResult {
-	t := reflect.TypeOf(value)
+// Validate runs every field rule and returns the collected errors.
+func (mv *ObjectValidator) Validate() *ValidationResult {
+	return &ValidationResult{Errors: mv.execute()}
+}
 
-	if t == nil || t.Kind() != reflect.Struct {
-		return &ValidationResult{Errors: []ValidationError{{Path: "", Message: fmt.Sprintf("Expected struct, got %T", value)}}}
-	}
+func (mv *ObjectValidator) execute() []ValidationError {
+	var errs []ValidationError
 
-	val := reflect.ValueOf(value)
-
-	res := &ValidationResult{}
-
-	for key, schema := range s.value {
-		if _, ok := t.FieldByName(key); !ok {
-			err := ValidationError{
-				Path:    key,
-				Message: "Required",
-			}
-
-			res.Errors = append(res.Errors, err)
-			continue
-		}
-
-		str := val.FieldByName(key).Interface()
-
-		result := schema.Parse(str)
-		if !result.IsValid() {
-			for _, err := range result.Errors {
-				newError := ValidationError{
-					Path:    formatPath(key, err.Path),
-					Message: err.Message,
-				}
-
-				res.Errors = append(res.Errors, newError)
-			}
+	for _, fr := range mv.rules {
+		for _, e := range fr.rule.Validate(mv.data[fr.key]) {
+			errs = append(errs, ValidationError{
+				Field:   joinFieldName(fr.key, e.Field),
+				Message: e.Message,
+			})
 		}
 	}
 
-	valueMap := structToMap(value)
-
-	for _, validator := range s.validators {
-		if !validator.ValidateFunc(valueMap) {
-			err := ValidationError{
-				Path:    "",
-				Message: validator.MessageFunc(valueMap),
-			}
-
-			res.Errors = append(res.Errors, err)
-		}
-	}
-
-	return res
+	return errs
 }
 
-func structToMap(item interface{}) map[string]interface{} {
-	result := map[string]interface{}{}
+// ObjectRule validates a nested unstructured object within NewObject data.
+type ObjectRule struct {
+	fn     func(*ObjectValidator)
+	notNil bool
+}
 
-	val := reflect.ValueOf(item)
-	typ := reflect.TypeOf(item)
+// Object declares rules for a nested object (map[string]any) inside Field:
+//
+//	v.Field("address", validator.Object(func(mv *validator.ObjectValidator) {
+//		mv.Field("city", rule.String().NotEmpty())
+//	}))
+//
+// For a typed map field on a struct (map[string]string and friends), use Map.
+// It panics if fn is nil.
+func Object(fn func(*ObjectValidator)) *ObjectRule {
+	if fn == nil {
+		panic("validator: Object requires a non-nil callback")
+	}
+	return &ObjectRule{fn: fn}
+}
 
-	for i := 0; i < val.NumField(); i++ {
-		field := typ.Field(i)
-		value := val.Field(i).Interface()
+// NotNil fails when the key is missing or its value is nil.
+func (r *ObjectRule) NotNil() *ObjectRule {
+	r.notNil = true
+	return r
+}
 
-		result[field.Name] = value
+// Validate implements Rule for standalone use; the value must be a
+// string-keyed map.
+func (r *ObjectRule) Validate(value any) []ValidationError {
+	value = unwrapPointers(value)
+
+	if value == nil {
+		if r.notNil {
+			return []ValidationError{{Message: msgNotNil}}
+		}
+		return nil
 	}
 
-	return result
+	m, ok := coerceMap[string, any](value)
+	if !ok {
+		return []ValidationError{{Message: msgObject}}
+	}
+
+	mv := &ObjectValidator{data: m}
+	r.fn(mv)
+
+	return mv.execute()
+}
+
+// SliceOf runs each element of a slice value through the given rule, for use
+// with NewObject fields.
+func SliceOf(each Rule) *SliceRule[[]any, any] {
+	return (&SliceRule[[]any, any]{}).EachValue(each)
+}
+
+// MapOf runs every value of a map through the given rule, for use with NewObject
+// fields. It is to Map what SliceOf is to Slice.
+func MapOf(each Rule) *MapRule[map[string]any, string, any] {
+	return (&MapRule[map[string]any, string, any]{}).EachValue(each)
 }

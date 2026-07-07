@@ -1,123 +1,198 @@
-package schema
+package validator
 
 import (
 	"fmt"
+	"net/mail"
 	"net/url"
+	"reflect"
+	"regexp"
 	"strings"
+	"unicode/utf8"
 )
 
-type StringSchema struct {
-	Schema[string]
+// StringRule validates a string field or value. Named string types
+// (type ID string) work too.
+type StringRule[T ~string] struct {
+	fieldBase[T]
 }
 
-var _ ISchema = (*StringSchema)(nil)
-
-func String() *StringSchema {
-	return &StringSchema{}
+// String validates a string field, plain or named:
+//
+//	validator.String(v, &s.Name).NotEmpty().Min(2)
+func String[T ~string](v *Validator, field *T) *StringRule[T] {
+	r := &StringRule[T]{fieldBase[T]{v: v, fieldPtr: field}}
+	v.addRule(r)
+	return r
 }
 
-func (s *StringSchema) Max(maxLength int) *StringSchema {
-	validator := Validator[string]{
-		MessageFunc: func(value string) string {
-			return fmt.Sprintf("String must contain at most %d character(s)", maxLength)
+// Validate implements Rule for standalone use; the value must be a string or
+// a named string type.
+func (r *StringRule[T]) Validate(value any) []ValidationError {
+	return validateStandalone(r.rules, value, "must be a string", func(v any) (T, bool) {
+		if s, ok := v.(T); ok {
+			return s, true
+		}
+		if rv := reflect.ValueOf(v); rv.Kind() == reflect.String {
+			return T(rv.String()), true
+		}
+		return "", false
+	})
+}
+
+// Presence rules
+
+// NotNil fails when the field pointer or standalone value is nil.
+func (r *StringRule[T]) NotNil() *StringRule[T] {
+	r.rules = append(r.rules, rule[T]{isNotNil: true, message: msgNotNil})
+	return r
+}
+
+// NotEmpty fails on "".
+func (r *StringRule[T]) NotEmpty() *StringRule[T] {
+	r.rules = append(r.rules, rule[T]{
+		validate: func(val T) bool { return val != "" },
+		message:  msgNotEmpty,
+	})
+	return r
+}
+
+// Length rules
+
+// Min requires at least n characters, counting runes rather than bytes.
+func (r *StringRule[T]) Min(n int) *StringRule[T] {
+	r.rules = append(r.rules, rule[T]{
+		validate: func(val T) bool { return utf8.RuneCountInString(string(val)) >= n },
+		message:  fmt.Sprintf("must be at least %d %s", n, pluralise(n, "character")),
+	})
+	return r
+}
+
+// Max allows at most n characters, counting runes rather than bytes.
+func (r *StringRule[T]) Max(n int) *StringRule[T] {
+	r.rules = append(r.rules, rule[T]{
+		validate: func(val T) bool { return utf8.RuneCountInString(string(val)) <= n },
+		message:  fmt.Sprintf("must be at most %d %s", n, pluralise(n, "character")),
+	})
+	return r
+}
+
+// Length requires between min and max characters, counting runes.
+func (r *StringRule[T]) Length(min, max int) *StringRule[T] {
+	r.rules = append(r.rules, rule[T]{
+		validate: func(val T) bool {
+			n := utf8.RuneCountInString(string(val))
+			return n >= min && n <= max
 		},
-		ValidateFunc: func(value string) bool {
-			return len(value) <= maxLength
+		message: fmt.Sprintf("must be between %d and %d characters", min, max),
+	})
+	return r
+}
+
+// Format rules
+
+// Email requires a valid email address.
+func (r *StringRule[T]) Email() *StringRule[T] {
+	r.rules = append(r.rules, rule[T]{
+		validate: func(val T) bool {
+			addr, err := mail.ParseAddress(string(val))
+			return err == nil && addr.Address == string(val)
 		},
+		message: "must be a valid email address",
+	})
+	return r
+}
+
+// URL requires an absolute URL with a scheme and host.
+func (r *StringRule[T]) URL() *StringRule[T] {
+	r.rules = append(r.rules, rule[T]{
+		validate: func(val T) bool {
+			u, err := url.Parse(string(val))
+			return err == nil && u.Scheme != "" && u.Host != ""
+		},
+		message: "must be a valid URL",
+	})
+	return r
+}
+
+// Matches requires the value to match the regular expression. The pattern is
+// compiled once when the rule is declared; like regexp.MustCompile, an
+// invalid pattern panics.
+func (r *StringRule[T]) Matches(pattern string) *StringRule[T] {
+	re := regexp.MustCompile(pattern)
+	r.rules = append(r.rules, rule[T]{
+		validate: func(val T) bool { return re.MatchString(string(val)) },
+		message:  fmt.Sprintf("must match \"%s\"", pattern),
+	})
+	return r
+}
+
+// Content rules
+
+// Includes requires the substring to be present.
+func (r *StringRule[T]) Includes(substr string) *StringRule[T] {
+	r.rules = append(r.rules, rule[T]{
+		validate: func(val T) bool { return strings.Contains(string(val), substr) },
+		message:  fmt.Sprintf("must contain \"%s\"", substr),
+	})
+	return r
+}
+
+// StartsWith requires the given prefix.
+func (r *StringRule[T]) StartsWith(prefix string) *StringRule[T] {
+	r.rules = append(r.rules, rule[T]{
+		validate: func(val T) bool { return strings.HasPrefix(string(val), prefix) },
+		message:  fmt.Sprintf("must start with \"%s\"", prefix),
+	})
+	return r
+}
+
+// EndsWith requires the given suffix.
+func (r *StringRule[T]) EndsWith(suffix string) *StringRule[T] {
+	r.rules = append(r.rules, rule[T]{
+		validate: func(val T) bool { return strings.HasSuffix(string(val), suffix) },
+		message:  fmt.Sprintf("must end with \"%s\"", suffix),
+	})
+	return r
+}
+
+// OneOf requires the value to be one of the given values, e.g. the members of
+// a string enum.
+func (r *StringRule[T]) OneOf(values ...T) *StringRule[T] {
+	r.rules = append(r.rules, rule[T]{
+		validate: func(val T) bool {
+			for _, v := range values {
+				if val == v {
+					return true
+				}
+			}
+			return false
+		},
+		message: msgOneOf(values, true),
+	})
+	return r
+}
+
+// Custom rules
+
+// Must runs a custom check against the value. It panics if fn is nil.
+func (r *StringRule[T]) Must(fn func(T) bool) *StringRule[T] {
+	if fn == nil {
+		panic("validator: Must requires a non-nil function")
 	}
-
-	s.validators = append(s.validators, validator)
-
-	return s
+	r.rules = append(r.rules, rule[T]{validate: fn, message: msgNotValid})
+	return r
 }
 
-func (s *StringSchema) Min(minLength int) *StringSchema {
-	validator := Validator[string]{
-		MessageFunc: func(value string) string {
-			return fmt.Sprintf("String must contain at least %d character(s)", minLength)
-		},
-		ValidateFunc: func(value string) bool {
-			return len(value) >= minLength
-		},
+// WithMessage replaces the previous rule's error message.
+func (r *StringRule[T]) WithMessage(msg string) *StringRule[T] {
+	if len(r.rules) > 0 {
+		r.rules[len(r.rules)-1].message = msg
 	}
-
-	s.validators = append(s.validators, validator)
-
-	return s
+	return r
 }
 
-func (s *StringSchema) Length(length int) *StringSchema {
-	validator := Validator[string]{
-		MessageFunc: func(value string) string {
-			return fmt.Sprintf("String must contain exactly %d character(s)", length)
-		},
-		ValidateFunc: func(value string) bool {
-			return len(value) == length
-		},
-	}
-
-	s.validators = append(s.validators, validator)
-
-	return s
-}
-
-func (s *StringSchema) Url() *StringSchema {
-	validator := Validator[string]{
-		MessageFunc: func(value string) string {
-			return "Invalid url"
-		},
-		ValidateFunc: func(value string) bool {
-			uri, err := url.ParseRequestURI(value)
-			return err == nil && uri.Host != ""
-		},
-	}
-
-	s.validators = append(s.validators, validator)
-
-	return s
-}
-
-func (s *StringSchema) Includes(str string) *StringSchema {
-	validator := Validator[string]{
-		MessageFunc: func(value string) string {
-			return fmt.Sprintf("Invalid input: must include \"%s\"", str)
-		},
-		ValidateFunc: func(value string) bool {
-			return strings.Contains(value, str)
-		},
-	}
-
-	s.validators = append(s.validators, validator)
-
-	return s
-}
-
-func (s *StringSchema) StartsWith(str string) *StringSchema {
-	validator := Validator[string]{
-		MessageFunc: func(value string) string {
-			return fmt.Sprintf("Invalid input: must start with \"%s\"", str)
-		},
-		ValidateFunc: func(value string) bool {
-			return strings.HasPrefix(value, str)
-		},
-	}
-
-	s.validators = append(s.validators, validator)
-
-	return s
-}
-
-func (s *StringSchema) EndsWith(str string) *StringSchema {
-	validator := Validator[string]{
-		MessageFunc: func(value string) string {
-			return fmt.Sprintf("Invalid input: must end with \"%s\"", str)
-		},
-		ValidateFunc: func(value string) bool {
-			return strings.HasSuffix(value, str)
-		},
-	}
-
-	s.validators = append(s.validators, validator)
-
-	return s
+// WithName overrides the field name used in errors.
+func (r *StringRule[T]) WithName(name string) *StringRule[T] {
+	r.name = name
+	return r
 }
